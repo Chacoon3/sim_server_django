@@ -3,34 +3,36 @@ from django.http.response import HttpResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.core import serializers
 from django.core.paginator import Paginator
+from django.contrib.auth.hashers import make_password, check_password, is_password_usable
 from .bmgt_models import *
+from .statusCode import Status
 
+
+import regex as re
 import json
 
 
 DEF_PAGE_SIZE = 10
 
 def api_error_handler(func):
+    """
+    API level exception handling decorator
+    """
 
     def wrapped(request) -> HttpResponse:
         try:
             return func(request)
-        
-        except (models.Model.DoesNotExist, User.MultipleObjectsReturned):
-            resp = HttpResponse()
-            resp.status_code = 404
-            resp.write("Object Not Found!")
 
         
         except (KeyError, json.JSONDecodeError):
             resp = HttpResponse()
-            resp.status_code = 400
-            resp.write("Bad Request!")
+            resp.status_code = Status.BAD_REQUEST
+            resp.write("Invalid data format! This could be issues with the website itself. Please contact the administrator.")
 
         except NotImplementedError:
             resp = HttpResponse()
-            resp.status_code = 501
-            resp.write("Not Implemented!")
+            resp.status_code = Status.NOT_IMPLEMENTED
+            resp.write("The feature is not implemented!")
 
         except:
             raise   # re-raise the exception
@@ -40,10 +42,19 @@ def api_error_handler(func):
     return wrapped
 
 
+def is_password_valid(password:str) -> bool:
+
+    leng_valid = len(password) >= 8
+    has_char = bool(re.search(pattern=r'\w', string=password))
+    has_num = bool(re.search(pattern=r'\d', string=password))
+    return leng_valid and has_char and has_num
+
+
 def to_paginator_response_json(paginator: Paginator, page: int) -> str:
     """
     converts a query set acquired by pagination to a json string
     """
+
     return json.dumps({
         "page": page,
         "page_size": paginator.per_page,
@@ -59,6 +70,7 @@ class UserApi:
 
     __field_user_did = "user_did"
     __field_user_password = "user_password"
+    __field_user_group_id = "group_id"
 
 
 
@@ -71,7 +83,7 @@ class UserApi:
         data = json.loads(request.body)
         user_did = data[UserApi.__field_user_did]
         user_password = data[UserApi.__field_user_password]
-        queryRes = User.objects.filter(
+        queryRes = BMGTUser.objects.filter(
                 user_did=user_did, 
                 user_activated = True,
                 user_password=user_password
@@ -79,7 +91,10 @@ class UserApi:
         
         if queryRes.count() == 1:
             resp.status_code = 200
+            user_group_id  = str(queryRes[0].group_id) if queryRes[0].group_id else ''
             resp.set_cookie(UserApi.__field_user_did, user_did)
+            resp.set_cookie('user_name', queryRes[0].full_name())
+            resp.set_cookie(UserApi.__field_user_group_id, user_group_id)
         else:
             resp.status_code = 401
             resp.write("Sign in failed. Please check your directory ID and password!")
@@ -95,19 +110,26 @@ class UserApi:
         data = json.loads(request.body)
         user_did = data[UserApi.__field_user_did]
         user_password = data[UserApi.__field_user_password]
-        queryRes = User.objects.filter(
+        queryRes = BMGTUser.objects.filter(
             user_did=user_did,
             user_activated = False
         )
         
     
         if queryRes.count() == 1:
-            resp.status_code = 200
-            queryRes[0].user_password = user_password
-            queryRes[0].user_activated = True
-            queryRes[0].save()
+
+            if is_password_valid(user_password):
+                resp.status_code = Status.OK
+                userInstance = queryRes[0]
+                userInstance.user_password = make_password(user_password)
+                print(len(userInstance.user_password))
+                userInstance.user_activated = True
+                userInstance.save()
+            else:
+                resp.status_code = Status.PASSWORD_ISSUE
+                resp.write("Sign up failed! Password must contain at least 8 characters, including at least one letter and one number!")
         else:
-            resp.status_code = 401
+            resp.status_code = Status.ACCOUNT_ISSUE
             resp.write("Sign up failed! Please check your directory ID!")
 
         return resp
@@ -131,7 +153,7 @@ class UserApi:
             resp.status_code = 400
             resp.write("Bad Request!")
         else:
-            queryRes = User.objects.filter(user_did=user_did)
+            queryRes = BMGTUser.objects.filter(user_did=user_did)
             if queryRes.count() == 1:
                 resp.status_code = 200
                 resp.write(serializers.serialize('json', queryRes))
@@ -153,7 +175,7 @@ class UserApi:
         order_by=request.GET.get('order_by', default=UserApi.__field_user_did)
 
         pager = Paginator(
-                User.objects.all().order_by(order_by if asc else '-'+order_by), 
+                BMGTUser.objects.all().order_by(order_by if asc else '-'+order_by), 
                 page_size
             )
         

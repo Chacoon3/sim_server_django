@@ -4,12 +4,12 @@ from .bmgt_models import *
 
 
 
-class UserAdmin(admin.ModelAdmin):
+class BMGTUserAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("None", {"fields": ["user_did", "user_password", ]}),
+        ("None", {"fields": ["user_did",]}),
     ]
     
-    list_display = ["user_did", "user_first_name", "user_last_name", "user_email", "user_create_time", "user_role_id", "user_tag_id", "user_activated",]
+    list_display = ["user_did", "user_first_name", "user_last_name", "user_create_time", "role_id", "tag_id", "user_activated",]
 
 
 class CaseAdmin(admin.ModelAdmin):
@@ -52,7 +52,7 @@ class TagAdmin(admin.ModelAdmin):
     list_display = ["tag_id", "tag_name",]
 
 
-admin.site.register(User, UserAdmin)
+admin.site.register(BMGTUser, BMGTUserAdmin)
 admin.site.register(Case, CaseAdmin)
 admin.site.register(CaseRecord, CaseRecordAdmin)
 admin.site.register(Group, GroupAdmin)

@@ -1,7 +1,7 @@
 
 def CORSMiddleware(get_response):
     """
-    this allows the frontend to access the backend otherwise the CORS requests get blocked
+    this enables the CORS policy so that frontend can access the backend
     """
     
     def middleware(request):
