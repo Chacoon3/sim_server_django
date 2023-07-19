@@ -52,6 +52,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'bmgt_platform.middlewares.bgmt_middlewares.CORSMiddleware',
 ]
 
 ROOT_URLCONF = 'sim_server_django.urls'
@@ -112,7 +113,7 @@ LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'America/New_York'
 
-USE_I18N = True
+USE_I18N = False
 
 USE_TZ = True
 
