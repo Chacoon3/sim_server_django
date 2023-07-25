@@ -8,7 +8,7 @@ import datetime
 """
 
 
-APP_LABEL = "bmgt_platform"
+APP_LABEL = "bmgt435_platform"
 
 
 class object(models.Model):
