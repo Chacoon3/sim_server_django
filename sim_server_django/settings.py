@@ -33,7 +33,8 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
-    "bmgt_platform.apps.BmgtPlatformConfig",
+    "bmgt435_platform.apps.BmgtPlatformConfig",
+    #  'rest_framework',
     # "polls.apps.PollsConfig",
     'django.contrib.admin',
     'django.contrib.auth',
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'bmgt435_platform.middlewares.bgmt435_middlewares.AuthenticationMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -52,7 +54,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'bmgt_platform.middlewares.bgmt_middlewares.CORSMiddleware',
+    'bmgt435_platform.middlewares.bgmt435_middlewares.CORSMiddleware',
 ]
 
 ROOT_URLCONF = 'sim_server_django.urls'
@@ -128,9 +130,6 @@ USE_I18N = False
 
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.1/howto/static-files/
 
 STATIC_URL = 'static/'
 
