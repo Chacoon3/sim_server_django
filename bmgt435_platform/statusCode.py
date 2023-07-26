@@ -14,6 +14,7 @@ class Status(object):
 
     PASSWORD_ISSUE = 406
     ACCOUNT_ISSUE = 407
+    INTEGRITY_ISSUE = 408
 
 
 
@@ -22,4 +23,3 @@ class Status(object):
     NOT_IMPLEMENTED = 501
     BAD_GATEWAY = 502
     SERVICE_UNAVAILABLE = 503
-

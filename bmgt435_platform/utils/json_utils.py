@@ -1,18 +1,23 @@
-from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models.query import QuerySet 
-from django.core.serializers import serialize as django_serialize
+from django.db.models import QuerySet
+from ..bmgt_models import DbModelBase
 import numpy as np
+import json
+import datetime
 
 
-class __CustomEncoder(DjangoJSONEncoder):
+class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
-        if isinstance(obj, np.integer):
+        if obj is datetime.datetime:
+            return obj.isoformat()
+        if obj is np.integer:
             return int(obj)
-        if isinstance(obj, np.floating):
+        if obj is np.floating:
             return float(obj)
         return super().default(obj)
 
+def serialize_models(querySet:QuerySet | list[DbModelBase]) -> str:
+    return json.dumps([model.as_serializable() for model in querySet],)
 
 
-def serialize(querySet:QuerySet):
-    return django_serialize('json', querySet, cls=__CustomEncoder)
+def serialize_simulations(result) -> str:
+    raise NotImplementedError

@@ -1,54 +1,56 @@
-from django.core import serializers
 from django.core.paginator import Paginator, Page
-# from django.db.models.query import QuerySet
-# from ..bmgt_models import *
+from django.db.models import QuerySet
+from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 
-import json
 
 
 class Query:
 
     __DEF_PAGE_SIZE = 10
 
+
     @staticmethod
-    def to_paginator_response(paginator: Paginator, page: int) -> str:
-        """
-        convert a query set acquired by pagination to a json string
-        """
+    def __query_error_handler(func):
 
-        return json.dumps({
-            "page": page,
-            "page_size": paginator.per_page,
-            "total_page": paginator.num_pages,
-            "total_count": paginator.count,
-            "has_next": paginator.page(page).has_next(),
-            "has_previous": paginator.page(page).has_previous(),
-            "data": json.loads(serializers.serialize("json", paginator.page(page).object_list)),
-        })
+        def wrapper(db_model, **kwargs):
+            try:
+                return func(db_model, **kwargs)
 
+            except ObjectDoesNotExist:
+                return None
+            except Exception as e:
+                raise
+            
+        return wrapper
+
+    @__query_error_handler
     @staticmethod
     def exists(db_model, **kwargs) -> bool:
         return db_model.objects.filter(**kwargs).exists()
 
+    @__query_error_handler
     @staticmethod
-    def fetch_one(db_model, **kwargs) -> str:
-        return serializers.serialize("json", [db_model.objects.get(**kwargs)])
+    def fetch_one(db_model, **kwargs) -> object:
+        return db_model.objects.get(**kwargs)
 
+    @__query_error_handler
     @staticmethod
     def delete_one(db_model, **kwargs) -> bool:
         db_model.objects.get(**kwargs).delete()
         return True
 
+    @__query_error_handler
     @staticmethod
-    def create_or_update_one(db_model, **kwargs) -> str | None:
+    def create_or_update_one(db_model, **kwargs) -> object:
         obj, success = db_model.objects.update_or_create(kwargs)
         if success:
-            return serializers.serialize("json", [obj])
+            return obj
         else:
             return None
 
+    @__query_error_handler
     @staticmethod
-    def fetch_page(db_model, **kwargs) -> str:
+    def fetch_page(db_model, **kwargs) -> Page:
 
         page_index = kwargs["page_index"]
         page_size = kwargs.get("page_size") or Query.__DEF_PAGE_SIZE
@@ -63,32 +65,35 @@ class Query:
         if page_index > pager.num_pages:
             raise Exception("page index out of range")
 
-        return Query.to_paginator_response(pager, page_index)
+        return pager.page(page_index)
 
+    @__query_error_handler
     @staticmethod
-    def fetch_all(db_model,  **kwargs) -> str:
+    def fetch_all(db_model,  **kwargs) -> QuerySet:
 
         if kwargs:
             querySet = db_model.objects.filter(kwargs)
         else:
             querySet = db_model.objects.all()
 
-        return serializers.serialize("json", querySet)
+        return querySet
 
+    @__query_error_handler
     @staticmethod
-    def create_all(db_model, iterator_objs) -> str:
+    def create_all(db_model, iterator_objs) -> QuerySet:
         querySet = db_model.objects.bulk_create(
             [data.object for data in iterator_objs])
-        return serializers.serialize("json", querySet)
+        return querySet
 
+    @__query_error_handler
     @staticmethod
-    def update_all(db_model, iterator_objs) -> str:
+    def update_all(db_model, iterator_objs) -> QuerySet:
 
         querySet = db_model.objects.bulk_update(
             [data.object for data in iterator_objs])
-        return serializers.serialize("json", querySet)
+        return querySet
 
-
+    @__query_error_handler
     @staticmethod
     def delete_all(db_model, **kwargs) -> bool:
         db_model.objects.filter(kwargs).delete()

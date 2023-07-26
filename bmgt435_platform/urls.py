@@ -10,24 +10,24 @@ urlpatterns = [
     path("api/auth/forget-password", Auth.forget_password, name="forget-password"),
 
 
-    path('api/users/me', UserApi.me,),
-    path('api/users', UserApi.users,),
-    path('api/users/<int:id>', UserApi.users, ),
-    path('api/users_paginated', UserApi.user_paginated, ),
+    path('api/users/me', UserApi.me, name='user-me'),
+    path('api/users', UserApi.users, name='users'),
+    path('api/users-paginated', UserApi.user_paginated, name='users_paginated'),
 
-    # path("user/get-user-info", UserApi.users, name="get-user-info"),
-    # path("user/get-user-list", UserApi.get_user_list, name="get-user-list"),
+    path('api/groups', GroupApi.groups, ),
+    path('api/groups-paginated', GroupApi.groups_paginated, ),
 
-    # path("tag/get-tag-info", TagApi.get_tag_info, name="get-tag-info"),
-    # path("tag/get-tag-list", TagApi.get_tag_list, name="get-tag-list"),
+    path('api/cases', CaseApi.cases, ),
+    path('api/cases-paginated', CaseApi.cases_paginated,),
 
-    # path("group/get-group-info", GroupApi.get_group_info, name="get-group-info"),
-    # path("group/get-group-list", GroupApi.get_group_list, name="get-group-list"),
-    
-    # path("case/get-case-info", CaseApi.get_case_info, name="get-case-info"),
-    # path("case/get-case-list", CaseApi.get_case_list, name="get-case-list"),
-    # path("case/run-case", CaseApi.run_case, name="run-case"),  
-    # path("case/get-case-record-info", CaseRecordApi.get_case_record_info, name="get-case-record-info"),
-    # path("case/get-case-record-list", CaseRecordApi.get_case_record_list, name="get-case-record-list"),
+    path('api/case-records', CaseRecordApi.case_records, ),
+    path('api/case-records-paginated', CaseRecordApi.case_records_paginated,),
 
+    path("api/tags", TagApi.tags, name="tags"),
+    path("api/tags-paginated", TagApi.tags_paginated, name="tags_paginated"),
+
+    path("api/roles", RoleApi.roles, name="roles"),
+    path("api/roles-paginated", RoleApi.roles_paginated, name="roles_paginated"),
+
+    path('api/manage/import-users', ManagementApi.import_users, name='import_users'),
 ]

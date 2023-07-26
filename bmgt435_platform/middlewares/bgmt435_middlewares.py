@@ -1,4 +1,4 @@
-from ..apis import UserApi
+from ..statusCode import Status
 from django.http.request import HttpRequest
 from django.http.response import HttpResponse
 
@@ -33,14 +33,22 @@ def AuthenticationMiddleware(get_response):
         requests without valid cookies will be rejected
         """
         
-        if request.path.startswith("/bmgtelp/api/auth/") or request.path.startswith("/admin/"):
+        if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin/"):
             return get_response(request)
-        else:
-            request_valid = bool(request.COOKIES.get(UserApi.field_user_did, None))
+        elif request.path.startswith("/bmgt435/api/manage/"):
+            request_valid = bool(request.COOKIES.get('id', None) and request.COOKIES.get('role_name', None) == 'admin')
             if request_valid:
                 return get_response(request)
             else:
-                resp = HttpResponse(status=401)
+                resp = HttpResponse(status=Status.UNAUTHORIZED)
+                resp.write("Failed to verify authentication!")
+                return resp
+        else:
+            request_valid = bool(request.COOKIES.get('id', None))
+            if request_valid:
+                return get_response(request)
+            else:
+                resp = HttpResponse(status=Status.UNAUTHORIZED)
                 resp.write("Failed to verify authentication!")
                 return resp
 

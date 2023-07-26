@@ -1,20 +1,24 @@
-from django.http.request import HttpRequest
-from django.http.response import HttpResponse
+from django.http import HttpRequest, HttpResponse
+from django.db import IntegrityError
 from django.views.decorators.http import require_POST, require_GET, require_http_methods
-from django.core import serializers
 from django.core.paginator import Paginator
+from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.contrib.auth.hashers import make_password, check_password, is_password_usable
+
 from .simulation.Cases import FoodCenter
 from .bmgt_models import *
 from .statusCode import Status
-from .utils.query import Query
+from .utils.json_utils import serialize_models
 
-
+import pandas as  pd
 import regex as re
 import json
+import io
 
 
 DEF_PAGE_SIZE = 10
+BATCH_QUERY_SIZE = 40
+
 
 
 def api_error_handler(func):
@@ -26,10 +30,20 @@ def api_error_handler(func):
         try:
             return func(request, **kwargs)
 
-        except (KeyError, json.JSONDecodeError):
+        except json.JSONDecodeError:
             resp = HttpResponse()
             resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format! This could be issues with the website itself. Please contact the administrator.")
+            resp.write("Invalid data format!")
+
+        except ObjectDoesNotExist:
+            resp = HttpResponse()
+            resp.status_code = Status.NOT_FOUND
+            resp.write("The requested resource does not exist!")
+
+        except IntegrityError:
+            resp = HttpResponse()
+            resp.status_code = Status.INTEGRITY_ISSUE
+            resp.write("The requested resource already exists!")
 
         except NotImplementedError:
             resp = HttpResponse()
@@ -67,18 +81,107 @@ def to_paginator_response(paginator: Paginator, page: int) -> str:
         "total_count": paginator.count,
         "has_next": paginator.page(page).has_next(),
         "has_previous": paginator.page(page).has_previous(),
-        "data": json.loads(serializers.serialize("json", paginator.page(page).object_list)),
+        "data": json.loads(serialize_models(paginator.page(page).object_list)),
     })
+
+
+def generic_query(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
+
+    resp = HttpResponse()
+
+    if request.method == "GET":
+        params = request.GET.dict()
+        if not is_admin:
+            params['flag_deleted'] = '0'
+        obj_set = cls.objects.filter(**params)
+        if obj_set:
+            resp.write(serialize_models(obj_set))
+            resp.status_code = Status.OK
+        else:
+            resp.status_code = Status.NOT_FOUND
+            resp.write("The requested resource does not exist!")
+    elif request.method == "DELETE":
+        params = request.GET.dict()
+        if params:
+            obj_set = cls.objects.filter(**params)
+            if obj_set:
+                if not is_admin:
+                    for obj in obj_set:
+                        obj.flag_deleted = 1
+                    count_update = cls.objects.bulk_update(obj_set, fields=['flag_deleted'], batch_size = BATCH_QUERY_SIZE)
+                    resp.status_code = Status.OK
+                    resp.write(f"Delete Success on {count_update} Rows!")
+                else:
+                    count_delete = obj_set.delete()
+                    resp.status_code = Status.OK
+                    resp.write(f"Delete Success on {count_delete} Rows!")
+            else:
+                resp.status_code = Status.NOT_FOUND
+                resp.write("The requested resource does not exist!")
+        else:
+            resp.status_code = Status.BAD_REQUEST
+            resp.write("Bad Request!")
+    elif request.method == "POST":
+        obj_set = json.loads(request.body)
+        if not is_admin:
+            data_valid = all([obj.get('id') and cls.objects.filter(id=obj['id'], flag_deleted = 0).exists() for obj in obj_set])
+        else:
+            data_valid = all([obj.get('id') and cls.objects.filter(id=obj['id']).exists() for obj in obj_set])
+        if obj_set and data_valid:
+            obj_set = [cls(**obj) for obj in obj_set]
+            count_update = cls.objects.bulk_update(obj_set, fields=cls.batch_updatable_fields, batch_size = BATCH_QUERY_SIZE)
+            resp.status_code = Status.UPDATED
+            resp.write(f"Update Success on {count_update} Rows!")
+        else:
+            resp.status_code = Status.NOT_FOUND
+            resp.write("The requested resource does not exist!")
+    elif request.method == "PUT":
+        obj_set = json.loads(request.body)
+        data_valid = all([not obj.get('id') for obj in obj_set])
+        if obj_set and data_valid:
+            obj_set = [cls(**obj) for obj in obj_set]
+            obj_created = cls.objects.bulk_create(obj_set, update_fields = cls.batch_updatable_fields, batch_size = BATCH_QUERY_SIZE)
+            count_created = len(obj_created)
+            resp.status_code = Status.CREATED
+            resp.write(f"Create Success on {count_created} Rows!")
+        else:
+            resp.status_code = Status.NOT_FOUND
+            resp.write("The requested resource does not exist!")
+    else:
+        resp.status_code = Status.METHOD_NOT_ALLOWED
+        resp.write("Method Not Allowed!")
+    return resp    
+
+
+def generic_pagenated_fetch(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
+    resp = HttpResponse()
+
+    page = int(request.GET.get('page', default=1))
+    page_size = request.GET.get('page_size', default=DEF_PAGE_SIZE)
+    asc = request.GET.get('asc')
+    order_by = request.GET.get('order_by', default='id')
+
+    if is_admin:
+        obj_set = cls.objects.all()
+    else:
+        obj_set = cls.objects.filter(flag_deleted = 0)
+    pager = Paginator(obj_set.order_by(order_by if asc else '-'+order_by), page_size)
+
+    if page > pager.num_pages:
+        resp.status_code = 404
+        resp.write("Page not found!")
+    else:
+        resp.status_code = 200
+        resp.write(to_paginator_response(pager, page))
+    return resp
 
 
 
 class Auth:
 
     @staticmethod
-    def set_auth_cookie(response: HttpResponse, user: BMGTUser) -> None:
-        response.set_cookie('user_did', user.user_did, samesite='none', secure= True)
-        response.set_cookie('user_name', user.full_name(), samesite='none', secure= True)
-        response.set_cookie('group_id', str(user.group_id), samesite='none', secure= True)
+    def __set_auth_cookie(response: HttpResponse, user: BMGTUser) -> None:
+        response.set_cookie('id', user.user_did, samesite='none', secure= True)
 
 
     @api_error_handler
@@ -89,14 +192,13 @@ class Auth:
         data = json.loads(request.body)
         user_did = data['user_did']
         user_password = data['user_password']
-        user = BMGTUser.objects.filter(
-            id = user_did, user_password = user_password, user_activated = True
-        ).get()
-        
-        if user:
+
+        user = BMGTUser.objects.get(user_did=user_did, user_activated=True, flag_deleted = 0)
+
+        if user and user.user_password and  check_password(user_password, user.user_password):
             resp.status_code = Status.OK
-            Auth.set_auth_cookie(resp, user)                
-            resp.write(serializers.serialize('json', [user]))
+            Auth.__set_auth_cookie(resp, user)                
+            resp.write(serialize_models([user]))
         else:
             resp.status_code = Status.PASSWORD_ISSUE
             resp.write("Sign in failed. Please check your directory ID and password!")
@@ -113,22 +215,13 @@ class Auth:
         user_did = data['user_did']
         user_password = data['user_password']
 
-        user = BMGTUser.objects.filter(
-            user_did=user_did,
-            user_activated = False
-        ).get()
-        
-    
-        if user:
+        user = BMGTUser.objects.get(user_did=user_did, user_activated=False, flag_deleted = 0)
 
-            if is_password_valid(user_password):
-                resp.status_code = Status.OK
-                user.user_password = make_password(user_password)
-                user.user_activated = True
-                user.save()
-            else:
-                resp.status_code = Status.PASSWORD_ISSUE
-                resp.write("Sign up failed! Password must contain at least 8 characters, including at least one letter and one number!")
+        if user and is_password_valid(user_password):
+            resp.status_code = Status.OK
+            user.user_password = make_password(user_password)
+            user.user_activated = True
+            user.save()
         else:
             resp.status_code = Status.ACCOUNT_ISSUE
             resp.write("Sign up failed! Please check your directory ID!")
@@ -136,22 +229,15 @@ class Auth:
         return resp
 
     @api_error_handler
-    @require_GET
+    @require_POST
     @staticmethod
     def forget_password(request: HttpRequest) -> HttpResponse:
 
-        user_did=request.GET.get(UserApi.field_user_did,default='')
+        user_did=request.GET.get('user_did')
         raise NotImplementedError
 
 
-
-
 class UserApi:
-
-    field_user_did = "user_did"
-    field_user_password = "user_password"
-    field_user_group_id = "group_id"
-
 
     @api_error_handler
     @require_GET
@@ -160,181 +246,62 @@ class UserApi:
         resp = HttpResponse()
         id = request.COOKIES.get('id')
         if id:
-            user = BMGTUser.objects.filter(id=id).get()
-            if user:
-                resp.write(serializers.serialize('json', [user]))
-                resp.status_code = Status.OK
-            else:
-                resp.status_code = Status.NOT_FOUND
-                resp.write("User not found!")
+            obj = BMGTUser.objects.get(id=id, user_activated=True, flag_deleted = 0)
+            resp.write(serialize_models([obj]))
+            resp.status_code = Status.OK
         else:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Bad Request!")
+            resp.status_code = Status.UNAUTHORIZED
+            resp.write("Unauthorized!")
 
         return resp
     
 
     @api_error_handler
-    @require_http_methods(["GET", "POST"])
     @staticmethod
-    def users(request: HttpRequest, id = None,) -> HttpResponse:
-        resp = HttpResponse()
-
-        if request.method == "GET":
-            if id:
-                user = BMGTUser.objects.filter(id=id).get()
-                if user:
-                    resp.status_code = Status.OK
-                    resp.write(serializers.serialize('json', [user]))
-                else:
-                    resp.status_code = Status.NOT_FOUND
-                    resp.write("User not found!")
-            else:
-                user_set = BMGTUser.objects.all()
-                resp.status_code = Status.OK
-                resp.write(serializers.serialize('json', user_set))
-        elif request.method == "POST":
-            user_set = serializers.deserialize('json', request.body)
-            if user_set:
-                for user in user_set:
-                    user.save()
-                resp.status_code = Status.OK
-            else:
-                resp.status_code = Status.BAD_REQUEST
-                resp.write("Bad Request!")
-        else:
-            resp.status_code = Status.METHOD_NOT_ALLOWED
-            resp.write("Method Not Allowed!")
-        return resp
+    def users(request: HttpRequest) -> HttpResponse:
+        return generic_query(BMGTUser, request)
 
 
     @api_error_handler
     @require_GET
     @staticmethod
     def user_paginated(request: HttpRequest)-> HttpResponse:
-        resp = HttpResponse()
-
-        page=int(request.GET.get('page', default=1))
-        page_size=request.GET.get('page_size', default=DEF_PAGE_SIZE)
-        asc=request.GET.get('asc')
-        order_by=request.GET.get('order_by', default=UserApi.field_user_did)
-
-        pager = Paginator(
-                BMGTUser.objects.all().order_by(order_by if asc else '-'+order_by), 
-                page_size
-            )
-        
-        if page > pager.num_pages:
-            resp.status_code = 404
-            resp.write("Page not found!")
-        else:
-            resp.status_code = 200
-            resp.write(to_paginator_response(pager, page))
-        return resp
+        return generic_pagenated_fetch(BMGTUser, request)
 
 
 class GroupApi:
-    """
-    this is for the custom BMGT group model rather than the default Django group model
-    """
     
     @api_error_handler
-    @require_GET
     @staticmethod
-    def get_group_info(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        group_id=request.GET.get('group_id')
+    def groups(request: HttpRequest) -> HttpResponse:
+        return generic_query(BMGTGroup, request)
 
-        if not group_id:
-            resp.status_code = 400
-            resp.write("Invalid parameters!")
-        else:
-            queryRes = BMGTGroup.objects.filter(group_id=group_id)
-            if queryRes.count() == 1:
-                resp.status_code = 200
-                resp.write(serializers.serialize('json', queryRes))
-            else:
-                resp.status_code = 404
-                resp.write("Group not found!")
-        return resp
-    
 
     @api_error_handler
     @require_GET
     @staticmethod
-    def get_group_list(request: HttpRequest)-> HttpResponse:
-        resp = HttpResponse()
-        
-        page=int(request.GET.get('page', default=1))
-        page_size=request.GET.get('page_size', default=DEF_PAGE_SIZE)
-        asc=request.GET.get('asc')
-        order_by=request.GET.get('order_by', default='group_id')
-
-        pager = Paginator(
-                BMGTGroup.objects.all().order_by(order_by if asc else '-'+order_by), 
-                page_size
-            )
-        
-        if page > pager.num_pages:
-            resp.status_code = 404
-            resp.write("Page not found!")
-        else:
-            resp.status_code = 200
-            resp.write(to_paginator_response(pager, page))
-        return resp
-
+    def groups_paginated(request: HttpRequest)-> HttpResponse:
+        return generic_pagenated_fetch(BMGTGroup, request)
+    
 
 class CaseApi:
     @api_error_handler
-    @require_GET
     @staticmethod
-    def get_case_info(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        case_id=request.GET.get('case_id')
-
-        if not case_id or case_id == '':
-            resp.status_code = 400
-            resp.write("Bad Request!")
-        else:
-            queryRes = Case.objects.filter(case_id=case_id)
-            if queryRes.count() == 1:
-                resp.status_code = 200
-                resp.write(serializers.serialize('json', queryRes))
-            else:
-                resp.status_code = 404
-                resp.write("Case not found!")
-        return resp
+    def cases(request: HttpRequest) -> HttpResponse:
+        return generic_query(Case, request)
     
 
     @api_error_handler
     @require_GET
     @staticmethod
-    def get_case_list(request: HttpRequest)-> HttpResponse:
-        resp = HttpResponse()
-        
-        page=int(request.GET.get('page', default=1))
-        page_size=request.GET.get('page_size', default=DEF_PAGE_SIZE)
-        asc=request.GET.get('asc', default= True)
-        order_by=request.GET.get('order_by', default='case_id')
-
-        pager = Paginator(
-                Case.objects.all().order_by(order_by if asc else '-'+order_by), 
-                page_size
-            )
-        
-        if page > pager.num_pages:
-            resp.status_code = 404
-            resp.write("Page not found!")
-        else:
-            resp.status_code = 200
-            resp.write(to_paginator_response(pager, page))
-        return resp
+    def cases_paginated(request: HttpRequest)-> HttpResponse:
+        return generic_pagenated_fetch(Case, request)
 
 
     @api_error_handler
     @require_POST
     @staticmethod
-    def run_case(request: HttpRequest) -> HttpResponse:
+    def run(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
         data = json.loads(request.body)
         case_id=data.get('case_id')
@@ -355,116 +322,67 @@ class CaseApi:
         return resp
     
 
-
 class CaseRecordApi:
     @api_error_handler
+    @staticmethod
+    def case_records(request: HttpRequest) -> HttpResponse:
+        return generic_query(CaseRecord, request)
+    
+    @api_error_handler
     @require_GET
     @staticmethod
-    def get_case_record_info(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
+    def case_records_paginated(request: HttpRequest)-> HttpResponse:
+        return generic_pagenated_fetch(CaseRecord, request)
 
-        case_id=request.GET.get('case_id')
 
-        if not case_id or case_id == '':
-            resp.status_code = 400
-            resp.write("Bad Request!")
-        else:
-            queryRes = CaseRecord.objects.filter(case_id=case_id)
-            if queryRes.count() == 1:
-                resp.status_code = 200
-                resp.write(serializers.serialize('json', queryRes))
-            else:
-                resp.status_code = 404
-                resp.write("Case record not found!")
-        return resp
+class TagApi:    
+
+    @api_error_handler
+    @staticmethod
+    def tags(request: HttpRequest) -> HttpResponse:
+        return generic_query(Tag, request)
     
 
     @api_error_handler
     @require_GET
     @staticmethod
-    def get_case_record_list(request: HttpRequest)-> HttpResponse:
-        resp = HttpResponse()
-
-        page=int(request.GET.get('page', default=1))
-        page_size=request.GET.get('page_size', default=DEF_PAGE_SIZE)
-        asc=request.GET.get('asc')
-        order_by=request.GET.get('order_by', default=UserApi.field_user_did)
-
-        pager = Paginator(
-                CaseRecord.objects.all().order_by(order_by if asc else '-'+order_by),
-                page_size
-            )
-        
-        if page > pager.num_pages:
-            resp.status_code = 404
-            resp.write("Page not found!")
-        else:
-            resp.status_code = 200
-            resp.write(to_paginator_response(pager, page))
-        return resp
+    def tags_paginated(request: HttpRequest) -> HttpResponse:
+        return generic_pagenated_fetch(Tag, request)
 
 
-class TagApi:
+class RoleApi:
+
     @api_error_handler
-    @require_POST
     @staticmethod
-    def add_tag(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        tag_name=request.POST.get('tag_name')
-
-        if not tag_name or tag_name == '':
-            resp.status_code = 400
-            resp.write("Bad Request!")
-        else:
-            tag = Tag(tag_name=tag_name)
-            tag.save()
-            resp.status_code = 200
-            resp.write(serializers.serialize('json', [tag]))
-        return resp
+    def roles(request: HttpRequest) -> HttpResponse:
+        return generic_query(Role, request)
     
 
     @api_error_handler
     @require_GET
     @staticmethod
-    def get_tag_info(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        tag_id=request.GET.get('tag_id')
+    def roles_paginated(request: HttpRequest) -> HttpResponse:
+        return generic_pagenated_fetch(Role, request)
 
-        if not tag_id or tag_id == '':
-            resp.status_code = 400
-            resp.write("Bad Request!")
-        else:
-            queryRes = Tag.objects.filter(tag_id=tag_id)
-            if queryRes.count() == 1:
-                resp.status_code = 200
-                resp.write(serializers.serialize('json', queryRes))
-            else:
-                resp.status_code = 404
-                resp.write("Tag not found!")
 
-        return resp
-    
-
+class ManagementApi:
     @api_error_handler
-    @require_GET
     @staticmethod
-    def get_tag_list(request: HttpRequest)-> HttpResponse:
+    def import_users(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
-        
-        page=int(request.GET.get('page', default=1))
-        page_size=request.GET.get('page_size', default=DEF_PAGE_SIZE)
-        asc=request.GET.get('asc')
-        order_by=request.GET.get('order_by', default='tag_id')
-
-        pager = Paginator(
-                Tag.objects.all().order_by(order_by if asc else '-'+order_by), 
-                page_size
-            )
-        
-        if page > pager.num_pages:
-            resp.status_code = 404
-            resp.write("Page not found!")
+        if request.body:
+            with io.BytesIO(request.body) as file:
+                table = pd.read_csv(file)
+                table.user_first_name = table.user_first_name.map(lambda x: x.strip())
+                table.user_last_name = table.user_last_name.map(lambda x: x.strip())
+                obj_set = []
+                for row in table.to_dict('records'):
+                    obj_set.append(BMGTUser(**row))
+                BMGTUser.objects.bulk_create(obj_set, batch_size=BATCH_QUERY_SIZE)
+                resp.status_code = Status.OK
+                resp.write("Imported!")
         else:
-            resp.status_code = 200
-            resp.write(to_paginator_response(pager, page))
+            resp.status_code = Status.BAD_REQUEST
+            resp.write("Bad Request!")
+
         return resp
