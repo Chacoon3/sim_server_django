@@ -18,7 +18,7 @@ class DbModelBase(models.Model):
 
     batch_updatable_fields = []
 
-    
+
     id = models.AutoField(auto_created=True, primary_key=True, null=False)
     create_time = models.DateTimeField(default=timezone.now, null=False)
     flag_deleted = models.IntegerField(default=0, null=False)
@@ -35,7 +35,7 @@ class DbModelBase(models.Model):
 class Role(DbModelBase):
 
     batch_updatable_fields = ["name"]
-    name=models.CharField(max_length=10, null=False)
+    name=models.CharField(max_length=10, null=False, unique=True, default='')
 
     def as_serializable(self) -> dict:
         return dict(
@@ -48,7 +48,7 @@ class Role(DbModelBase):
 class Tag(DbModelBase):
 
     batch_updatable_fields = ["name"]
-    name=models.CharField(max_length=10, null=False)
+    name=models.CharField(max_length=10, null=False, unique=True, default='')
 
     def as_serializable(self):
         return dict(
@@ -62,7 +62,7 @@ class Tag(DbModelBase):
 class BMGTGroup(DbModelBase):
 
     batch_updatable_fields = ["name"]
-    name=models.CharField(max_length=30, null=False)
+    name=models.CharField(max_length=30, null=False, unique=True, default='')
 
     def as_serializable(self) -> dict:
         return dict(
@@ -77,32 +77,32 @@ class BMGTUser(DbModelBase):
 
     batch_updatable_fields = ["user_first_name", "user_last_name", "role_id", "group_id", "user_activated"]
 
-    user_did = models.CharField(max_length=100, auto_created=False, null=False, unique=True,)
-    user_first_name = models.CharField(max_length = 60, null=False)
-    user_last_name = models.CharField(max_length = 60, null=False)
-    user_password = models.CharField(max_length = 100,  null=False, default="")  # stores the password hash
-    user_activated = models.IntegerField(default=0, null=False)
+    did = models.CharField(max_length=100, auto_created=False, null=False, unique=True,)
+    first_name = models.CharField(max_length = 60, null=False)
+    last_name = models.CharField(max_length = 60, null=False)
+    password = models.CharField(max_length = 100,  null=False, default="")  # stores the password hash
+    activated = models.IntegerField(default=0, null=False)
 
     role_id = models.ForeignKey(Role, on_delete=models.CASCADE, null=True)
     group_id = models.ForeignKey(BMGTGroup, on_delete=models.CASCADE, null=True)
 
     def full_name(self):
         name = ''
-        if self.user_first_name and self.user_last_name:
-            name = self.user_first_name + " " + self.user_last_name
-        elif self.user_first_name:
-            name = self.user_first_name
-        elif self.user_last_name:
-            name = self.user_last_name
+        if self.first_name and self.last_name:
+            name = self.first_name + " " + self.last_name
+        elif self.first_name:
+            name = self.first_name
+        elif self.last_name:
+            name = self.last_name
         return name
 
     def as_serializable(self) -> dict:
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
-            user_did=self.user_did,
-            user_first_name=self.user_first_name,
-            user_last_name=self.user_last_name,
+            user_did=self.did,
+            user_first_name=self.first_name,
+            user_last_name=self.last_name,
             role_id=self.role_id,
             group_id=self.group_id,
         )
@@ -128,27 +128,26 @@ class Case(DbModelBase):
 
     batch_updatable_fields = ["name", "case_description"]
 
-    name = models.CharField(max_length=50, null=False)
-    case_description = models.TextField(null=False)
+    name = models.CharField(max_length=50, null=False, default='')
+    description = models.TextField(null=False)
 
     def as_serializable(self) -> dict:
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
             name=self.name,
-            case_description=self.case_description,
+            case_description=self.description,
         )
 
 
 class CaseRecord(DbModelBase):
 
-    batch_updatable_fields = ["group_id", "case_id", "case_record_status", "case_record_score", "case_record_detail_json"]
+    batch_updatable_fields = ["group_id", "case_id", "case_record_score", "case_record_detail_json"]
 
     group_id = models.ForeignKey(BMGTGroup, on_delete=models.CASCADE)
     case_id = models.ForeignKey(Case, on_delete=models.CASCADE)
-    case_record_status = models.IntegerField(default=0)
-    case_record_score = models.FloatField(default=0.0)
-    case_record_detail_json = models.TextField(null=False)
+    score = models.FloatField(default=0.0, null=False)
+    detail_json = models.TextField(null=False, default='')
 
     def as_serializable(self) -> dict:
         return dict(
@@ -156,7 +155,6 @@ class CaseRecord(DbModelBase):
             create_time = self.create_time_as_string(),
             group_id=self.group_id,
             case_id=self.case_id,
-            case_record_status=self.case_record_status,
-            case_record_score=self.case_record_score,
-            case_record_detail_json=self.case_record_detail_json,
+            case_record_score=self.score,
+            case_record_detail_json=self.detail_json,
         )

@@ -1,9 +1,9 @@
 from django.http import HttpRequest, HttpResponse
 from django.db import IntegrityError
-from django.views.decorators.http import require_POST, require_GET, require_http_methods
+from django.views.decorators.http import require_POST, require_GET
 from django.core.paginator import Paginator
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
-from django.contrib.auth.hashers import make_password, check_password, is_password_usable
+from django.contrib.auth.hashers import make_password, check_password
 
 from .simulation.Cases import FoodCenter
 from .bmgt_models import *
@@ -16,12 +16,12 @@ import json
 import io
 
 
-DEF_PAGE_SIZE = 10
-BATCH_QUERY_SIZE = 40
+__DEF_PAGE_SIZE = 10
+__BATCH_QUERY_SIZE = 40
 
 
 
-def api_error_handler(func):
+def _api_error_handler(func):
     """
     API level exception handling decorator
     """
@@ -39,6 +39,11 @@ def api_error_handler(func):
             resp = HttpResponse()
             resp.status_code = Status.NOT_FOUND
             resp.write("The requested resource does not exist!")
+
+        except MultipleObjectsReturned:
+            resp = HttpResponse()
+            resp.status_code = Status.DATABASE_ERROR
+            resp.write("Multiple objects found while singular is expected!")
 
         except IntegrityError:
             resp = HttpResponse()
@@ -58,7 +63,7 @@ def api_error_handler(func):
     return wrapped
 
 
-def is_password_valid(password:str) -> bool:
+def __password_valid(password:str) -> bool:
     """
     password strength validation
     """
@@ -69,7 +74,7 @@ def is_password_valid(password:str) -> bool:
     return leng_valid and has_char and has_num
 
 
-def to_paginator_response(paginator: Paginator, page: int) -> str:
+def __to_paginator_response(paginator: Paginator, page: int) -> str:
     """
     convert a query set acquired by pagination to a json string
     """
@@ -85,7 +90,7 @@ def to_paginator_response(paginator: Paginator, page: int) -> str:
     })
 
 
-def generic_query(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
+def __generic_query(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
 
     resp = HttpResponse()
 
@@ -108,7 +113,7 @@ def generic_query(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
                 if not is_admin:
                     for obj in obj_set:
                         obj.flag_deleted = 1
-                    count_update = cls.objects.bulk_update(obj_set, fields=['flag_deleted'], batch_size = BATCH_QUERY_SIZE)
+                    count_update = cls.objects.bulk_update(obj_set, fields=['flag_deleted'], batch_size = __BATCH_QUERY_SIZE)
                     resp.status_code = Status.OK
                     resp.write(f"Delete Success on {count_update} Rows!")
                 else:
@@ -129,7 +134,7 @@ def generic_query(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
             data_valid = all([obj.get('id') and cls.objects.filter(id=obj['id']).exists() for obj in obj_set])
         if obj_set and data_valid:
             obj_set = [cls(**obj) for obj in obj_set]
-            count_update = cls.objects.bulk_update(obj_set, fields=cls.batch_updatable_fields, batch_size = BATCH_QUERY_SIZE)
+            count_update = cls.objects.bulk_update(obj_set, fields=cls.batch_updatable_fields, batch_size = __BATCH_QUERY_SIZE)
             resp.status_code = Status.UPDATED
             resp.write(f"Update Success on {count_update} Rows!")
         else:
@@ -140,7 +145,7 @@ def generic_query(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
         data_valid = all([not obj.get('id') for obj in obj_set])
         if obj_set and data_valid:
             obj_set = [cls(**obj) for obj in obj_set]
-            obj_created = cls.objects.bulk_create(obj_set, update_fields = cls.batch_updatable_fields, batch_size = BATCH_QUERY_SIZE)
+            obj_created = cls.objects.bulk_create(obj_set, update_fields = cls.batch_updatable_fields, batch_size = __BATCH_QUERY_SIZE)
             count_created = len(obj_created)
             resp.status_code = Status.CREATED
             resp.write(f"Create Success on {count_created} Rows!")
@@ -153,11 +158,11 @@ def generic_query(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
     return resp    
 
 
-def generic_pagenated_fetch(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
+def __generic_paginated_fetch(cls, request: HttpRequest, is_admin = False) -> HttpResponse:
     resp = HttpResponse()
 
     page = int(request.GET.get('page', default=1))
-    page_size = request.GET.get('page_size', default=DEF_PAGE_SIZE)
+    page_size = request.GET.get('page_size', default=__DEF_PAGE_SIZE)
     asc = request.GET.get('asc')
     order_by = request.GET.get('order_by', default='id')
 
@@ -172,7 +177,7 @@ def generic_pagenated_fetch(cls, request: HttpRequest, is_admin = False) -> Http
         resp.write("Page not found!")
     else:
         resp.status_code = 200
-        resp.write(to_paginator_response(pager, page))
+        resp.write(__to_paginator_response(pager, page))
     return resp
 
 
@@ -181,10 +186,10 @@ class Auth:
 
     @staticmethod
     def __set_auth_cookie(response: HttpResponse, user: BMGTUser) -> None:
-        response.set_cookie('id', user.user_did, samesite='none', secure= True)
+        response.set_cookie('id', str(user.id), samesite='none', secure= True)
 
 
-    @api_error_handler
+    @_api_error_handler
     @require_POST
     @staticmethod
     def sign_in(request: HttpRequest) -> HttpResponse:
@@ -195,7 +200,7 @@ class Auth:
 
         user = BMGTUser.objects.get(user_did=user_did, user_activated=True, flag_deleted = 0)
 
-        if user and user.user_password and  check_password(user_password, user.user_password):
+        if user and user.password and  check_password(user_password, user.password):
             resp.status_code = Status.OK
             Auth.__set_auth_cookie(resp, user)                
             resp.write(serialize_models([user]))
@@ -205,7 +210,7 @@ class Auth:
 
         return resp
 
-    @api_error_handler
+    @_api_error_handler
     @require_POST
     @staticmethod
     def sign_up(request: HttpRequest) -> HttpResponse:
@@ -217,10 +222,10 @@ class Auth:
 
         user = BMGTUser.objects.get(user_did=user_did, user_activated=False, flag_deleted = 0)
 
-        if user and is_password_valid(user_password):
+        if user and __password_valid(user_password):
             resp.status_code = Status.OK
-            user.user_password = make_password(user_password)
-            user.user_activated = True
+            user.password = make_password(user_password)
+            user.activated = True
             user.save()
         else:
             resp.status_code = Status.ACCOUNT_ISSUE
@@ -228,7 +233,7 @@ class Auth:
 
         return resp
 
-    @api_error_handler
+    @_api_error_handler
     @require_POST
     @staticmethod
     def forget_password(request: HttpRequest) -> HttpResponse:
@@ -239,7 +244,7 @@ class Auth:
 
 class UserApi:
 
-    @api_error_handler
+    @_api_error_handler
     @require_GET
     @staticmethod
     def me(request: HttpRequest,) -> HttpResponse:
@@ -256,49 +261,49 @@ class UserApi:
         return resp
     
 
-    @api_error_handler
+    @_api_error_handler
     @staticmethod
     def users(request: HttpRequest) -> HttpResponse:
-        return generic_query(BMGTUser, request)
+        return __generic_query(BMGTUser, request)
 
 
-    @api_error_handler
+    @_api_error_handler
     @require_GET
     @staticmethod
     def user_paginated(request: HttpRequest)-> HttpResponse:
-        return generic_pagenated_fetch(BMGTUser, request)
+        return __generic_paginated_fetch(BMGTUser, request)
 
 
 class GroupApi:
     
-    @api_error_handler
+    @_api_error_handler
     @staticmethod
     def groups(request: HttpRequest) -> HttpResponse:
-        return generic_query(BMGTGroup, request)
+        return __generic_query(BMGTGroup, request)
 
 
-    @api_error_handler
+    @_api_error_handler
     @require_GET
     @staticmethod
     def groups_paginated(request: HttpRequest)-> HttpResponse:
-        return generic_pagenated_fetch(BMGTGroup, request)
+        return __generic_paginated_fetch(BMGTGroup, request)
     
 
 class CaseApi:
-    @api_error_handler
+    @_api_error_handler
     @staticmethod
     def cases(request: HttpRequest) -> HttpResponse:
-        return generic_query(Case, request)
+        return __generic_query(Case, request)
     
 
-    @api_error_handler
+    @_api_error_handler
     @require_GET
     @staticmethod
     def cases_paginated(request: HttpRequest)-> HttpResponse:
-        return generic_pagenated_fetch(Case, request)
+        return __generic_paginated_fetch(Case, request)
 
 
-    @api_error_handler
+    @_api_error_handler
     @require_POST
     @staticmethod
     def run(request: HttpRequest) -> HttpResponse:
@@ -323,50 +328,50 @@ class CaseApi:
     
 
 class CaseRecordApi:
-    @api_error_handler
+    @_api_error_handler
     @staticmethod
     def case_records(request: HttpRequest) -> HttpResponse:
-        return generic_query(CaseRecord, request)
+        return __generic_query(CaseRecord, request)
     
-    @api_error_handler
+    @_api_error_handler
     @require_GET
     @staticmethod
     def case_records_paginated(request: HttpRequest)-> HttpResponse:
-        return generic_pagenated_fetch(CaseRecord, request)
+        return __generic_paginated_fetch(CaseRecord, request)
 
 
 class TagApi:    
 
-    @api_error_handler
+    @_api_error_handler
     @staticmethod
     def tags(request: HttpRequest) -> HttpResponse:
-        return generic_query(Tag, request)
+        return __generic_query(Tag, request)
     
 
-    @api_error_handler
+    @_api_error_handler
     @require_GET
     @staticmethod
     def tags_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_pagenated_fetch(Tag, request)
+        return __generic_paginated_fetch(Tag, request)
 
 
 class RoleApi:
 
-    @api_error_handler
+    @_api_error_handler
     @staticmethod
     def roles(request: HttpRequest) -> HttpResponse:
-        return generic_query(Role, request)
+        return __generic_query(Role, request)
     
 
-    @api_error_handler
+    @_api_error_handler
     @require_GET
     @staticmethod
     def roles_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_pagenated_fetch(Role, request)
+        return __generic_paginated_fetch(Role, request)
 
 
 class ManagementApi:
-    @api_error_handler
+    @_api_error_handler
     @staticmethod
     def import_users(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
@@ -375,10 +380,8 @@ class ManagementApi:
                 table = pd.read_csv(file)
                 table.user_first_name = table.user_first_name.map(lambda x: x.strip())
                 table.user_last_name = table.user_last_name.map(lambda x: x.strip())
-                obj_set = []
-                for row in table.to_dict('records'):
-                    obj_set.append(BMGTUser(**row))
-                BMGTUser.objects.bulk_create(obj_set, batch_size=BATCH_QUERY_SIZE)
+                obj_set = [BMGTUser(**row) for row in table.to_dict('records')]
+                BMGTUser.objects.bulk_create(obj_set, batch_size=__BATCH_QUERY_SIZE)
                 resp.status_code = Status.OK
                 resp.write("Imported!")
         else:

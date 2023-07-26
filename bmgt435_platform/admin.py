@@ -21,10 +21,10 @@ class CaseAdmin(admin.ModelAdmin):
 
 class CaseRecordAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("None", {"fields": ["group_id", "case_id", "case_record_score", 'case_record_status']}),
+        ("None", {"fields": ["group_id", "case_id", "case_record_score",]}),
     ]
 
-    list_display = ["group_id", "case_id", "case_record_score", 'case_record_status']
+    list_display = ["group_id", "case_id", "case_record_score"]
 
 
 class GroupAdmin(admin.ModelAdmin):

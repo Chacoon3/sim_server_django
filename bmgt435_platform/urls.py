@@ -12,7 +12,7 @@ urlpatterns = [
 
     path('api/users/me', UserApi.me, name='user-me'),
     path('api/users', UserApi.users, name='users'),
-    path('api/users-paginated', UserApi.user_paginated, name='users_paginated'),
+    path('api/users-paginated', UserApi.user_paginated, name='users-paginated'),
 
     path('api/groups', GroupApi.groups, ),
     path('api/groups-paginated', GroupApi.groups_paginated, ),
@@ -24,10 +24,10 @@ urlpatterns = [
     path('api/case-records-paginated', CaseRecordApi.case_records_paginated,),
 
     path("api/tags", TagApi.tags, name="tags"),
-    path("api/tags-paginated", TagApi.tags_paginated, name="tags_paginated"),
+    path("api/tags-paginated", TagApi.tags_paginated, name="tags-paginated"),
 
     path("api/roles", RoleApi.roles, name="roles"),
-    path("api/roles-paginated", RoleApi.roles_paginated, name="roles_paginated"),
+    path("api/roles-paginated", RoleApi.roles_paginated, name="roles-paginated"),
 
-    path('api/manage/import-users', ManagementApi.import_users, name='import_users'),
+    path('api/manage/import-users', ManagementApi.import_users, name='import-sers'),
 ]
