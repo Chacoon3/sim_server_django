@@ -16,6 +16,8 @@ urlpatterns = [
 
     path('api/groups', GroupApi.groups, ),
     path('api/groups-paginated', GroupApi.groups_paginated, ),
+    path('api/groups/<int:group_id>/users', GroupApi.group_users, ),
+    path('api/groups/<int:group_id>/users-paginated', GroupApi.groups_users_paginated, ),
 
     path('api/cases', CaseApi.cases, ),
     path('api/cases-paginated', CaseApi.cases_paginated,),

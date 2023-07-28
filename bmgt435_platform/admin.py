@@ -5,10 +5,10 @@ from .bmgt_models import *
 
 class BMGTUserAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("None", {"fields": ["user_did",]}),
+        ("None", {"fields": ["did",]}),
     ]
     
-    list_display = ["user_did", "user_first_name", "user_last_name", "create_time", "role_id", "user_activated",]
+    list_display = ["id", "did", "first_name", "last_name", "create_time", "role_id", "activated",]
 
 
 class CaseAdmin(admin.ModelAdmin):
@@ -16,15 +16,15 @@ class CaseAdmin(admin.ModelAdmin):
         ("None", {"fields": ["name", "case_description"]}),
     ]
 
-    list_display = ["name", "create_time",]
+    list_display = ["id", "name", "create_time",]
 
 
 class CaseRecordAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("None", {"fields": ["group_id", "case_id", "case_record_score",]}),
+        ("None", {"fields": ["group_id", "case_id", "score",]}),
     ]
 
-    list_display = ["group_id", "case_id", "case_record_score"]
+    list_display = ["id", "group_id", "case_id", "score"]
 
 
 class GroupAdmin(admin.ModelAdmin):

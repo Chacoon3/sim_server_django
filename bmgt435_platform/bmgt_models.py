@@ -4,10 +4,12 @@ from django.utils import timezone
 
 """
 @: Database schema
+@: Field Naming Convention: snake_case without class name prefix
 """
 
 
 APP_LABEL = "bmgt435_platform"
+
 
 
 class DbModelBase(models.Model):
@@ -29,6 +31,10 @@ class DbModelBase(models.Model):
         
 
     def as_serializable(self) -> dict:
+        raise NotImplementedError()
+
+
+    def validate(self):
         raise NotImplementedError()
 
 
@@ -75,14 +81,13 @@ class BMGTGroup(DbModelBase):
 
 class BMGTUser(DbModelBase):
 
-    batch_updatable_fields = ["user_first_name", "user_last_name", "role_id", "group_id", "user_activated"]
+    batch_updatable_fields = ["first_name", "last_name", "role_id", "group_id", "activated"]
 
     did = models.CharField(max_length=100, auto_created=False, null=False, unique=True,)
     first_name = models.CharField(max_length = 60, null=False)
     last_name = models.CharField(max_length = 60, null=False)
     password = models.CharField(max_length = 100,  null=False, default="")  # stores the password hash
-    activated = models.IntegerField(default=0, null=False)
-
+    activated = models.BooleanField(default=False, null=False, unique=False)
     role_id = models.ForeignKey(Role, on_delete=models.CASCADE, null=True)
     group_id = models.ForeignKey(BMGTGroup, on_delete=models.CASCADE, null=True)
 
@@ -100,9 +105,9 @@ class BMGTUser(DbModelBase):
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
-            user_did=self.did,
-            user_first_name=self.first_name,
-            user_last_name=self.last_name,
+            did=self.did,
+            first_name=self.first_name,
+            last_name=self.last_name,
             role_id=self.role_id,
             group_id=self.group_id,
         )
@@ -126,7 +131,7 @@ class Tagged(DbModelBase):
 
 class Case(DbModelBase):
 
-    batch_updatable_fields = ["name", "case_description"]
+    batch_updatable_fields = ["name", "description"]
 
     name = models.CharField(max_length=50, null=False, default='')
     description = models.TextField(null=False)
@@ -136,13 +141,13 @@ class Case(DbModelBase):
             id=self.id,
             create_time = self.create_time_as_string(),
             name=self.name,
-            case_description=self.description,
+            description=self.description,
         )
 
 
 class CaseRecord(DbModelBase):
 
-    batch_updatable_fields = ["group_id", "case_id", "case_record_score", "case_record_detail_json"]
+    batch_updatable_fields = ["group_id", "case_id", "score", "detail_json"]
 
     group_id = models.ForeignKey(BMGTGroup, on_delete=models.CASCADE)
     case_id = models.ForeignKey(Case, on_delete=models.CASCADE)
@@ -155,6 +160,6 @@ class CaseRecord(DbModelBase):
             create_time = self.create_time_as_string(),
             group_id=self.group_id,
             case_id=self.case_id,
-            case_record_score=self.score,
-            case_record_detail_json=self.detail_json,
+            score=self.score,
+            detail_json=self.detail_json,
         )

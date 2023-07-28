@@ -1,5 +1,7 @@
 class Status(object):
 
+    
+
     OK = 200
     CREATED = 201
     ACCEPTED = 202
@@ -15,6 +17,8 @@ class Status(object):
     PASSWORD_ISSUE = 406
     ACCOUNT_ISSUE = 407
     INTEGRITY_ISSUE = 408
+    VALIDATION_ERROR = 409
+    DATA_FORMAT_ERROR = 410
 
     INTERNAL_SERVER_ERROR = 500
     NOT_IMPLEMENTED = 501

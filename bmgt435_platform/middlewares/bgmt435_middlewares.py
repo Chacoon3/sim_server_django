@@ -14,7 +14,7 @@ def CORSMiddleware(get_response):
         response["Access-Control-Allow-Origin"] = "http://localhost:5173"
         response["Access-Control-Allow-Credentials"] = "true"
         response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
-        response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
         response['Access-Control-Expose-Headers'] = 'cookie, set-cookie'
         response['UseHttpOnly'] = '1'
         
