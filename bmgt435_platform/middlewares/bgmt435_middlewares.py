@@ -36,7 +36,7 @@ def AuthenticationMiddleware(get_response):
         if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin/"):
             return get_response(request)
         elif request.path.startswith("/bmgt435/api/manage/"):
-            request_valid = bool(request.COOKIES.get('id', None) and request.COOKIES.get('role_name', None) == 'admin')
+            request_valid = bool(request.COOKIES.get('id', None) and request.COOKIES.get('role_id', None) == '1')
             if request_valid:
                 return get_response(request)
             else:
