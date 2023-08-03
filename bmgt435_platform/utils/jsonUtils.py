@@ -1,5 +1,5 @@
 from django.db.models import QuerySet
-from ..bmgt_models import DbModelBase
+from ..bmgtModels import DbModelBase
 import numpy as np
 import json
 import datetime
@@ -16,8 +16,11 @@ class CustomJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 def serialize_models(querySet:QuerySet | list[DbModelBase]) -> str:
-    return json.dumps([model.as_serializable() for model in querySet],)
+    return json.dumps([model.as_dictionary() for model in querySet],)
 
+
+def serialize_model_instance(instance:DbModelBase) -> str:
+    return json.dumps(instance.as_dictionary())
 
 def serialize_simulations(result) -> str:
     raise NotImplementedError

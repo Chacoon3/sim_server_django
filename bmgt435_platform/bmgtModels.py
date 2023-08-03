@@ -30,8 +30,15 @@ class DbModelBase(models.Model):
         return self.create_time.astimezone().isoformat()
         
 
-    def as_serializable(self) -> dict:
+    def as_dictionary(self) -> dict:
         raise NotImplementedError()
+
+    def set_fields(self, save = False, **kwargs):
+        for field in kwargs.keys():
+            if field in self.batch_updatable_fields:
+                setattr(self, field, kwargs[field])
+        if save:
+            self.save()
 
 
     def validate(self):
@@ -43,7 +50,7 @@ class Role(DbModelBase):
     batch_updatable_fields = ["name"]
     name=models.CharField(max_length=10, null=False, unique=True, default='')
 
-    def as_serializable(self) -> dict:
+    def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
@@ -56,7 +63,7 @@ class Tag(DbModelBase):
     batch_updatable_fields = ["name"]
     name=models.CharField(max_length=10, null=False, unique=True, default='')
 
-    def as_serializable(self):
+    def as_dictionary(self):
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
@@ -70,7 +77,7 @@ class BMGTGroup(DbModelBase):
     batch_updatable_fields = ["name"]
     name=models.CharField(max_length=30, null=False, unique=True, default='')
 
-    def as_serializable(self) -> dict:
+    def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
@@ -101,7 +108,7 @@ class BMGTUser(DbModelBase):
             name = self.last_name
         return name
 
-    def as_serializable(self) -> dict:
+    def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
@@ -120,7 +127,7 @@ class Tagged(DbModelBase):
     tag_id = models.ForeignKey(Tag, on_delete=models.CASCADE)
     user_id = models.ForeignKey(BMGTUser, on_delete=models.CASCADE)
 
-    def as_serializable(self) -> dict:
+    def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
@@ -136,7 +143,7 @@ class Case(DbModelBase):
     name = models.CharField(max_length=50, null=False, default='')
     description = models.TextField(null=False)
 
-    def as_serializable(self) -> dict:
+    def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),
@@ -154,7 +161,7 @@ class CaseRecord(DbModelBase):
     score = models.FloatField(default=0.0, null=False)
     detail_json = models.TextField(null=False, default='')
 
-    def as_serializable(self) -> dict:
+    def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
             create_time = self.create_time_as_string(),

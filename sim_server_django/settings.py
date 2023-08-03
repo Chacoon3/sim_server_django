@@ -46,7 +46,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'bmgt435_platform.middlewares.bgmt435_middlewares.AuthenticationMiddleware',
+    # 'bmgt435_platform.middlewares.bgmt435Middlewares.AuthenticationMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -54,7 +54,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'bmgt435_platform.middlewares.bgmt435_middlewares.CORSMiddleware',
+    'bmgt435_platform.middlewares.bgmt435Middlewares.CORSMiddleware',
+    'bmgt435_platform.middlewares.bgmt435Middlewares.TestModeMiddleware',
 ]
 
 ROOT_URLCONF = 'sim_server_django.urls'

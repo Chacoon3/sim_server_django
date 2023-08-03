@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .bmgt_models import *
+from .bmgtModels import *
 
 
 
@@ -8,7 +8,7 @@ class BMGTUserAdmin(admin.ModelAdmin):
         ("None", {"fields": ["did",]}),
     ]
     
-    list_display = ["id", "did", "first_name", "last_name", "create_time", "role_id", "activated",]
+    list_display = ["id", "did", "first_name", "last_name", "create_time", "role_id", "activated", "password",]
 
 
 class CaseAdmin(admin.ModelAdmin):
