@@ -4,10 +4,10 @@ from .apis import *
 
 urlpatterns = [
 
-    path("api/auth/sign-in", Auth.sign_in, name="sign-in"),
-    path("api/auth/sign-up", Auth.sign_up, name="sign-up"),
-    path("api/auth/forget-password", Auth.forget_password, name="forget-password"),
-    path('api/auth/sign-out', Auth.sign_out, name='sign-out'),
+    path("api/auth/sign-in", AuthApi.sign_in, name="sign-in"),
+    path("api/auth/sign-up", AuthApi.sign_up, name="sign-up"),
+    path("api/auth/forget-password", AuthApi.forget_password, name="forget-password"),
+    path('api/auth/sign-out', AuthApi.sign_out, name='sign-out'),
 
 
     path('api/users', UserApi.users, name='users'),
@@ -16,9 +16,7 @@ urlpatterns = [
 
 
     path('api/groups', GroupApi.groups, ),
-    path('api/groups-info', GroupApi.groups_info, ),
     path('api/groups/paginated', GroupApi.groups_paginated, ),
-    path('api/groups-info/paginated', GroupApi.groups_info_paginated, ),
 
 
     path('api/cases', CaseApi.cases, ),

@@ -1,24 +1,27 @@
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, ValidationError
 from django.db import IntegrityError
-from .customExceptions import DataFormatError
 from django.core.paginator import Paginator
 from django.http import HttpRequest, HttpResponse
+
+from .customExceptions import DataFormatError
+from .jsonUtils import serialize_models
 from .statusCode import Status
 
 import json
+import regex as re
 
 
 __DEF_PAGE_SIZE = 10
 __BATCH_QUERY_SIZE = 40
 
 
-def get_batch_size(list):
-    return min(len(list), __BATCH_QUERY_SIZE)
+def get_batch_size(listObj):
+    return min(len(listObj), __BATCH_QUERY_SIZE)
 
 
 def api_error_handler(func):
     """
-    API level exception handling decorator
+    API level exception handling
     """
 
     def wrapped(request, **kwargs) -> HttpResponse:
@@ -82,24 +85,35 @@ def password_valid(password: str) -> bool:
     return leng_valid and has_char and has_num
 
 
-def to_paginator_response(paginator: Paginator, page: int) -> str:
+def get_paginator_params(request:HttpRequest) -> dict:
+    params = {}
+    params['page'] = request.GET.get('page', None)
+    params['size'] = request.GET.get('size', None)
+    params['asc'] = request.GET.get('asc', None)
+    params['order'] = request.GET.get('order', None)
+    if not all(params.values()):
+        raise DataFormatError("missing pagination parameters")
+    params['page'] = int(params['page'])
+    params['size'] = int(params['size'])
+    if not params['size'] > 0:
+        raise DataFormatError("invalid page size")
+    return params
+
+
+
+def to_paginated_data(paginator: Paginator, page: int) -> str:
     """
     convert a query set acquired by pagination to a json string
     """
 
     return json.dumps({
         "page": page,
-        "page_size": paginator.per_page,
-        "total_page": paginator.num_pages,
-        "total_count": paginator.count,
-        "has_next": paginator.page(page).has_next(),
-        "has_previous": paginator.page(page).has_previous(),
+        "totalPage": paginator.num_pages,
+        # "totalCount": paginator.count,
+        # "hasNext": paginator.page(page).has_next(),
+        # "hasPrev": paginator.page(page).has_previous(),
         "data": json.loads(serialize_models(paginator.page(page).object_list)),
     })
-
-
-def _is_admin(request:HttpRequest) -> bool:
-    return request.COOKIES.get('role_id', None) == '1'
 
 
 def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
@@ -130,11 +144,11 @@ def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
                     obj.flag_deleted = 1
                 count_update = cls.objects.bulk_update(
                         obj_set, fields=['flag_deleted'], batch_size=get_batch_size(obj_set))
-                resp.status_code = Status.OK
+                resp.status_code = Status.DELETED
                 resp.write(f"Delete Success on {count_update} Rows!")
             else:
                 count_delete = obj_set.delete()
-                resp.status_code = Status.OK
+                resp.status_code = Status.DELETED
                 resp.write(f"Delete Success on {count_delete} Rows!")
         else:
             resp.status_code = Status.NOT_FOUND
@@ -148,7 +162,7 @@ def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
         if all_exists:
             [target.set_fields(**obj) for target, obj in zip(target_set, obj_set)]
             count_update = cls.objects.bulk_update(
-                target_set, fields=cls.batch_updatable_fields, batch_size=get_batch_size(target_set))
+                target_set, fields=cls.query_editable_fields, batch_size=get_batch_size(target_set))
             resp.status_code = Status.UPDATED
             resp.write(f"Update Success on {count_update} Rows!")
         else:
@@ -183,25 +197,20 @@ def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
 
 def generic_paginated_fetch(cls, request: HttpRequest,) -> HttpResponse:
     resp = HttpResponse()
-    is_admin = _is_admin(request)
+    is_admin = request.COOKIES.get('role_id', None)
+    pager_params = get_paginator_params(request)
 
-    params = request.GET.dict()
-    page = params.pop('page', default=1)
-    page_size = params.pop('page_size', default=__DEF_PAGE_SIZE)
-    asc = params.pop('asc', default=True)
-    order_by = params.pop('order_by', default='id')
-
-
-    if not is_admin:
-        params['flag_deleted'] = '0'
-    obj_set = cls.objects.filter(**params)
+    if is_admin:
+        obj_set = cls.objects.all()
+    else:
+        obj_set = cls.objects.filter(flag_deleted = 0)
     pager = Paginator(obj_set.order_by(
-        order_by if asc else '-'+order_by), page_size)
+        pager_params['order'] if pager_params['asc'] else '-'+pager_params['order']), pager_params['size'])
 
-    if page > pager.num_pages:
+    if pager_params['page'] > pager.num_pages:
         resp.status_code = Status.NOT_FOUND
         resp.write("Page not found!")
     else:
         resp.status_code = Status.OK
-        resp.write(to_paginator_response(pager, page))
+        resp.write(to_paginated_data(pager, pager_params['page']))
     return resp

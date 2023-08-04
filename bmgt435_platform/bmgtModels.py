@@ -18,24 +18,29 @@ class DbModelBase(models.Model):
         app_label = APP_LABEL
 
 
-    batch_updatable_fields = []
+    query_editable_fields = ["flag_deleted",]
 
 
     id = models.AutoField(auto_created=True, primary_key=True, null=False)
     create_time = models.DateTimeField(default=timezone.now, null=False)
     flag_deleted = models.IntegerField(default=0, null=False)
-
-
-    def create_time_as_string(self) -> str:
-        return self.create_time.astimezone().isoformat()
         
 
     def as_dictionary(self) -> dict:
-        raise NotImplementedError()
+        """
+        global interface for json serialization
+        should be implemented by all subclasses
+        the dictionary should be json serializable
+        """
+        raise NotImplementedError("as dictionary method not implemented")
+
+    @property
+    def formatted_create_time(self):
+        return self.create_time.astimezone().isoformat()
 
     def set_fields(self, save = False, **kwargs):
         for field in kwargs.keys():
-            if field in self.batch_updatable_fields:
+            if field in self.query_editable_fields:
                 setattr(self, field, kwargs[field])
         if save:
             self.save()
@@ -47,56 +52,57 @@ class DbModelBase(models.Model):
 
 class Role(DbModelBase):
 
-    batch_updatable_fields = ["name"]
+    query_editable_fields = ['name', "flag_deleted"]
     name=models.CharField(max_length=10, null=False, unique=True, default='')
 
     def as_dictionary(self) -> dict:
-        return dict(
-            id=self.id,
-            create_time = self.create_time_as_string(),
-            name=self.name,
-        )
+        return {
+            "id": self.id,
+            "name": self.name,
+        }
 
 
 class Tag(DbModelBase):
 
-    batch_updatable_fields = ["name"]
+    query_editable_fields = ['name', "flag_deleted"]
     name=models.CharField(max_length=10, null=False, unique=True, default='')
 
-    def as_dictionary(self):
-        return dict(
-            id=self.id,
-            create_time = self.create_time_as_string(),
-            name=self.name,
-        )
-
+    def as_dictionary(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+        }
 
 
 class BMGTGroup(DbModelBase):
 
-    batch_updatable_fields = ["name"]
+    query_editable_fields = ['name', "flag_deleted"]
     name=models.CharField(max_length=30, null=False, unique=True, default='')
 
+    @property
+    def users(self):
+        return BMGTUser.objects.filter(group_id=self.id)
+
+
     def as_dictionary(self) -> dict:
-        return dict(
-            id=self.id,
-            create_time = self.create_time_as_string(),
-            name=self.name,
-        )
-
-
+        return {
+            "id": self.id,
+            "name": self.name,
+            "users": [user.as_dictionary() for user in self.users]
+        }
 
 class BMGTUser(DbModelBase):
 
-    batch_updatable_fields = ["first_name", "last_name", "role_id", "group_id", "activated"]
+
+    query_editable_fields = ["first_name", "last_name", "role_id", "group_id", "activated", "flag_deleted"]
 
     did = models.CharField(max_length=100, auto_created=False, null=False, unique=True,)
     first_name = models.CharField(max_length = 60, null=False)
     last_name = models.CharField(max_length = 60, null=False)
     password = models.CharField(max_length = 100,  null=False, default="")  # stores the password hash
     activated = models.BooleanField(default=False, null=False, unique=False)
-    role_id = models.ForeignKey(Role, on_delete=models.CASCADE, null=True)
-    group_id = models.ForeignKey(BMGTGroup, on_delete=models.CASCADE, null=True)
+    role_id = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True,)
+    group_id = models.ForeignKey(BMGTGroup, on_delete=models.SET_NULL, null=True)
 
     def full_name(self):
         name = ''
@@ -111,18 +117,18 @@ class BMGTUser(DbModelBase):
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.create_time_as_string(),
+            create_time = self.formatted_create_time,
             did=self.did,
             first_name=self.first_name,
             last_name=self.last_name,
-            role_id=self.role_id,
-            group_id=self.group_id,
+            role_id=self.role_id.id if self.role_id else None,
+            group_id=self.group_id.id if self.group_id else None,
         )
 
 
 class Tagged(DbModelBase):
 
-    batch_updatable_fields = ["tag_id", "user_id"]
+    query_editable_fields = ["tag_id", "user_id", "flag_deleted"]
 
     tag_id = models.ForeignKey(Tag, on_delete=models.CASCADE)
     user_id = models.ForeignKey(BMGTUser, on_delete=models.CASCADE)
@@ -130,15 +136,15 @@ class Tagged(DbModelBase):
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.create_time_as_string(),
-            tag_id=self.tag_id,
-            user_id=self.user_id,
+            create_time = self.formatted_create_time,
+            tag_id=self.tag_id.id,
+            user_id=self.user_id.id,
         )
 
 
 class Case(DbModelBase):
 
-    batch_updatable_fields = ["name", "description"]
+    query_editable_fields = ["name", "description", "flag_deleted"]
 
     name = models.CharField(max_length=50, null=False, default='')
     description = models.TextField(null=False)
@@ -146,7 +152,7 @@ class Case(DbModelBase):
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.create_time_as_string(),
+            create_time = self.formatted_create_time,
             name=self.name,
             description=self.description,
         )
@@ -154,19 +160,19 @@ class Case(DbModelBase):
 
 class CaseRecord(DbModelBase):
 
-    batch_updatable_fields = ["group_id", "case_id", "score", "detail_json"]
+    query_editable_fields = ["group_id", "case_id", "score", "detail_json", "flag_deleted"]
 
-    group_id = models.ForeignKey(BMGTGroup, on_delete=models.CASCADE)
-    case_id = models.ForeignKey(Case, on_delete=models.CASCADE)
+    group_id = models.ForeignKey(BMGTGroup, on_delete=models.SET_NULL, null=True,)
+    case_id = models.ForeignKey(Case, on_delete=models.SET_NULL, null=True,)
     score = models.FloatField(default=0.0, null=False)
     detail_json = models.TextField(null=False, default='')
 
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.create_time_as_string(),
-            group_id=self.group_id,
-            case_id=self.case_id,
+            create_time = self.formatted_create_time,
+            group_id=self.group_id.id,
+            case_id=self.case_id.id,
             score=self.score,
             detail_json=self.detail_json,
         )

@@ -2,23 +2,20 @@ from django.http import HttpRequest, HttpResponse
 from django.views.decorators.http import require_POST, require_GET,  require_http_methods
 from django.core.paginator import Paginator
 from django.contrib.auth.hashers import make_password, check_password
-from django.shortcuts import redirect
 
 from .simulation.Cases import FoodCenter
 from .bmgtModels import *
 from .utils.statusCode import Status
-from .utils.jsonUtils import *
-from .utils.apiUtils import *
+from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulations
+from .utils.apiUtils import api_error_handler, password_valid, generic_unary_query, generic_paginated_fetch, get_paginator_params
 
-import time
 import pandas as pd
-import regex as re
 import json
 import io
 
 
 
-class Auth:
+class AuthApi:
 
     @staticmethod
     def __set_auth_cookie(response: HttpResponse, user: BMGTUser) -> None:
@@ -44,7 +41,7 @@ class Auth:
             user = user[0]
             if user and user.password and check_password(password, user.password):
                 resp.status_code = Status.OK
-                Auth.__set_auth_cookie(resp, user)
+                AuthApi.__set_auth_cookie(resp, user)
                 resp.write(serialize_model_instance(user))
             else:
                 resp.status_code = Status.UNAUTHORIZED
@@ -98,7 +95,7 @@ class Auth:
     @staticmethod
     def sign_out(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
-        Auth.__clear_auth_cookie(resp)
+        AuthApi.__clear_auth_cookie(resp)
         resp.status_code = Status.OK
         return resp
 
@@ -110,7 +107,7 @@ class UserApi:
     @staticmethod
     def me(request: HttpRequest,) -> HttpResponse:
         resp = HttpResponse()
-        id = request.COOKIES.get('id')
+        id = request.COOKIES.get('id', None) if request.COOKIES else None
         if id:
             obj = BMGTUser.objects.get(id=id, activated=1, flag_deleted=0)
             resp.write(serialize_model_instance(obj))
@@ -138,16 +135,26 @@ class GroupApi:
     @api_error_handler
     @staticmethod
     def groups(request: HttpRequest) -> HttpResponse:
-        if request.method == 'PUT':
+        if request.method == 'POST':
             resp = HttpResponse()
-            obj_set = json.loads(request.body)
-            if type(obj_set) is not list:
-                obj_set= [obj_set]
-            [obj.pop('id', None) for obj in obj_set]
-            obj_set = [BMGTGroup(**obj) for obj in obj_set]
-            count_created = len(BMGTGroup.objects.bulk_create(obj_set))
-            resp.write(f'Create success on {count_created} rows!')
-            resp.status_code = Status.OK
+            user_id = request.COOKIES.get('id', None)
+            user = BMGTUser.objects.filter(id=user_id, activated=1, flag_deleted=0)
+            if user_id and len(user) == 1:
+                user = user[0];
+                if user.group_id == None:
+                    data = json.loads(request.body)
+                    name = data['name']
+                    group = BMGTGroup(name=name,)
+                    group.save()
+                    user.gourp_id = group.id
+                    resp.write("Created group successfully!")
+                    resp.status_code = Status.CREATED
+                else:
+                    resp.write("User already has a group!")
+                    resp.status_code = Status.BAD_REQUEST
+            else:
+                resp.write("User unauthorized!")
+                resp.status_code = Status.UNAUTHORIZED    
             return resp
         else:
             return generic_unary_query(BMGTGroup, request)
@@ -173,39 +180,26 @@ class GroupApi:
 
         return resp
 
+
     @api_error_handler
     @require_GET
     @staticmethod
-    def groups_paginated(request: HttpRequest) -> HttpResponse:
+    def groups_paginated(request: HttpRequest,) -> HttpResponse:
+        # resp = HttpResponse()
+
+        # pager_params = get_paginator_params(request)
+
+        # group_set = BMGTGroup.objects.filter(flag_deleted=0)
+        # pager = Paginator(group_set.order_by(pager_params['order'] if pager_params['asc'] else '-'+pager_params['order']), pager_params['size'])
+        # group_set = pager.page(pager_params['page']).object_list
+        # if group_set:
+        #     resp.write(serialize_models(group_set))
+        #     resp.status_code = Status.OK        
+        # else:
+        #     resp.write('No group found!')
+        #     resp.status_code = Status.NOT_FOUND
+
         return generic_paginated_fetch(BMGTGroup, request)
-
-    @api_error_handler
-    @require_GET
-    @staticmethod
-    def groups_info_paginated(request: HttpRequest,) -> HttpResponse:
-        resp = HttpResponse()
-
-        page = int(request.GET.get('page', default=1))
-        page_size = request.GET.get('page_size', default=__DEF_PAGE_SIZE)
-        asc = request.GET.get('asc')
-        order_by = request.GET.get('order_by', default='id')
-
-
-        group_set = BMGTGroup.objects.filter(flag_deleted=0)
-        pager = Paginator(group_set.order_by(order_by if asc else '-'+order_by), page_size)
-        group_set = pager.page(page).object_list
-        if group_set:
-            group_set = [group.as_dictionary() for group in group_set]
-            for group in group_set:
-                users = BMGTUser.objects.filter(group_id=group['id'], flag_deleted=0)
-                group['users'] = [user.as_dictionary() for user in users]
-            resp.write(serialize_models(group_set))
-            resp.status_code = Status.OK        
-        else:
-            resp.write('No group found!')
-            resp.status_code = Status.NOT_FOUND
-
-        return resp
 
 
 class CaseApi:
@@ -300,7 +294,7 @@ class ManagementApi:
                     lambda x: x.strip())
                 obj_set = [BMGTUser(**row) for row in table.to_dict('records')]
                 BMGTUser.objects.bulk_create(
-                    obj_set, batch_size=__BATCH_QUERY_SIZE)
+                    obj_set, batch_size=10)
                 resp.status_code = Status.OK
                 resp.write("Imported!")
         else:
@@ -308,26 +302,3 @@ class ManagementApi:
             resp.write("Bad Request!")
 
         return resp
-
-
-
-class TestApi(object):
-    @staticmethod
-    def test_lagged(request:HttpRequest) -> HttpResponse:
-        """
-        enforces a 3-sec time lag before redirecting to the original url
-        the original url is the url without the '/test/lag' part
-        """
-        url = request.get_full_path()
-        pattern = r'/test/lagged/(?P<sleep_time>[0-9]+)/'
-        search_result =  re.search(pattern, url)
-        if search_result:
-            time.sleep(int(search_result.group('sleep_time')))
-            redir_url = re.sub(pattern, '/', url)
-            return redirect(redir_url)
-        else:
-            resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Bad Request!")
-            return resp
-        
