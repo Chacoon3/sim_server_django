@@ -38,6 +38,8 @@ def CORSMiddleware(get_response):
 
 def AuthenticationMiddleware(get_response):
 
+    ADMIN_ROLE = "admin"
+
     def middleware(request: HttpRequest):
         """
         assert the validity of cookies
@@ -48,7 +50,7 @@ def AuthenticationMiddleware(get_response):
         if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin/"):
             return get_response(request)
         elif request.path.startswith("/bmgt435/api/manage/"):
-            request_valid = bool(request.COOKIES.get('id', None) and request.COOKIES.get('role_id', None) == '1')
+            request_valid = bool(request.COOKIES.get('id', None) and request.COOKIES.get('role', None) == ADMIN_ROLE)
             if request_valid:
                 return get_response(request)
             else:
@@ -70,9 +72,10 @@ def AuthenticationMiddleware(get_response):
 def TestModeMiddleware(get_response):
     # add random lag to simulate network latency
     def middleware(request: HttpRequest):
-        lag = random.randint(0, 20)
-        lag = round(lag / 10, 1)
-        time.sleep(lag) 
+        if not request.path.startswith("/bmgt435/api/manage/") and not request.path.startswith("/admin/"):
+            lag = random.randint(0, 20)
+            lag = round(lag / 10, 1)
+            time.sleep(lag) 
         return get_response(request)
 
     return middleware

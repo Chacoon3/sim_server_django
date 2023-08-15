@@ -4,14 +4,13 @@ from django.core.paginator import Paginator
 from django.http import HttpRequest, HttpResponse
 
 from .customExceptions import DataFormatError
-from .jsonUtils import serialize_models
 from .statusCode import Status
+from .jsonUtils import serialize_paginated_data, serialize_models
 
-import json
 import regex as re
+import json
 
 
-__DEF_PAGE_SIZE = 10
 __BATCH_QUERY_SIZE = 40
 
 
@@ -31,43 +30,46 @@ def api_error_handler(func):
         except json.JSONDecodeError as e:
             resp = HttpResponse()
             resp.status_code = Status.BAD_REQUEST
-            resp.write(e.message or e)
+            resp.write(e.args[0])
 
         except ObjectDoesNotExist as e:
             resp = HttpResponse()
             resp.status_code = Status.NOT_FOUND
-            resp.write(e)
+            resp.write(e.args[0])
 
         except MultipleObjectsReturned as e:
             resp = HttpResponse()
-            resp.status_code = Status.DATABASE_ERROR
-            resp.write(e)
+            resp.status_code = Status.BAD_REQUEST
+            resp.write(e.args[0])
 
         except KeyError as e:
             resp = HttpResponse()
             resp.status_code = Status.BAD_REQUEST
-            resp.write(e)
+            resp.write(e.args[0])
 
         except IntegrityError as e:
             resp = HttpResponse()
             resp.status_code = Status.BAD_REQUEST
-            resp.write(e.args)
+            resp.write(e.args[0])
 
         except ValidationError as e:
             resp = HttpResponse()
-            resp.status_code = Status.VALIDATION_ERROR
-            resp.write(e)
+            resp.status_code = Status.BAD_REQUEST
+            resp.write(e.args[0])
 
         except DataFormatError as e:
-            resp = HttpResponse(e)
+            resp = HttpResponse()
+            resp.status_code = Status.BAD_REQUEST
+            resp.write(e.args[0])
 
         except NotImplementedError as e:
             resp = HttpResponse()
             resp.status_code = Status.NOT_IMPLEMENTED
-            resp.write(e)
+            resp.write(e.args[0])
 
-        except:
+        except Exception as e:
             raise
+
 
         return resp
 
@@ -89,9 +91,9 @@ def get_paginator_params(request:HttpRequest) -> dict:
     params = {}
     params['page'] = request.GET.get('page', None)
     params['size'] = request.GET.get('size', None)
-    params['asc'] = request.GET.get('asc', None)
-    params['order'] = request.GET.get('order', None)
-    if not all(params.values()):
+    params['asc'] = request.GET.get('asc', '1')
+    params['order'] = request.GET.get('order', 'id')
+    if not params['page'] or not params['size']:
         raise DataFormatError("missing pagination parameters")
     params['page'] = int(params['page'])
     params['size'] = int(params['size'])
@@ -99,21 +101,6 @@ def get_paginator_params(request:HttpRequest) -> dict:
         raise DataFormatError("invalid page size")
     return params
 
-
-
-def to_paginated_data(paginator: Paginator, page: int) -> str:
-    """
-    convert a query set acquired by pagination to a json string
-    """
-
-    return json.dumps({
-        "page": page,
-        "totalPage": paginator.num_pages,
-        # "totalCount": paginator.count,
-        # "hasNext": paginator.page(page).has_next(),
-        # "hasPrev": paginator.page(page).has_previous(),
-        "data": json.loads(serialize_models(paginator.page(page).object_list)),
-    })
 
 
 def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
@@ -195,22 +182,24 @@ def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
 
 
 
-def generic_paginated_fetch(cls, request: HttpRequest,) -> HttpResponse:
+def generic_paginated_fetch(cls, request: HttpRequest, **kwargs) -> HttpResponse:
+    """
+    generic paginated fetch on one table
+    pass in a model class and a request object    
+    kwargs: filter conditions
+    """
     resp = HttpResponse()
-    is_admin = request.COOKIES.get('role_id', None)
     pager_params = get_paginator_params(request)
 
-    if is_admin:
-        obj_set = cls.objects.all()
-    else:
-        obj_set = cls.objects.filter(flag_deleted = 0)
-    pager = Paginator(obj_set.order_by(
-        pager_params['order'] if pager_params['asc'] else '-'+pager_params['order']), pager_params['size'])
+
+    obj_set = cls.objects if not kwargs else cls.objects.filter(**kwargs)
+    obj_set = obj_set.order_by(pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
+    pager = Paginator(obj_set, pager_params['size'])
 
     if pager_params['page'] > pager.num_pages:
-        resp.status_code = Status.NOT_FOUND
         resp.write("Page not found!")
+        resp.status_code = Status.NOT_FOUND
     else:
+        resp.write(serialize_paginated_data(pager, pager_params['page']))
         resp.status_code = Status.OK
-        resp.write(to_paginated_data(pager, pager_params['page']))
     return resp

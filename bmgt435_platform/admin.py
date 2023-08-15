@@ -5,18 +5,18 @@ from .bmgtModels import *
 
 class BMGTUserAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("None", {"fields": ["did", "role_id", "group_id"]}),
+        ("None", {"fields": ["did", "first_name", "last_name", "role", "group_id"]}),
     ]
     
-    list_display = ["id", "did", "first_name", "last_name", "create_time", "role_id", "group_id", "activated", "password",]
+    list_display = ["id", "did", "first_name", "last_name", "create_time", "role", "group_id", "activated",]
 
 
 class CaseAdmin(admin.ModelAdmin):
-    fieldsets = [
-        ("None", {"fields": ["name", "case_description"]}),
-    ]
+    # fieldsets = [
+    #     ("None", {"fields": ["name", "case_description"]}),
+    # ]
 
-    list_display = ["id", "name", "create_time",]
+    list_display = ["id", "name", "create_time", "visible"]
 
 
 class CaseRecordAdmin(admin.ModelAdmin):
@@ -28,19 +28,8 @@ class CaseRecordAdmin(admin.ModelAdmin):
 
 
 class GroupAdmin(admin.ModelAdmin):
-    fieldsets = [
-        ("None", {"fields": ["name"]}),
-    ]
 
-    list_display = ["id", "name", "create_time",]
-
-
-class RoleAdmin(admin.ModelAdmin):
-    fieldsets = [
-        ("None", {"fields": ["name"]}),
-    ]
-
-    list_display = ["id", "name",]
+    list_display = ["id", "create_time",]
 
 
 class TagAdmin(admin.ModelAdmin):
@@ -52,8 +41,7 @@ class TagAdmin(admin.ModelAdmin):
 
 
 admin.site.register(BMGTUser, BMGTUserAdmin)
-admin.site.register(Case, CaseAdmin)
-admin.site.register(CaseRecord, CaseRecordAdmin)
+admin.site.register(BMGTCase, CaseAdmin)
+admin.site.register(BMGTCaseRecord, CaseRecordAdmin)
 admin.site.register(BMGTGroup, GroupAdmin)
-admin.site.register(Role, RoleAdmin)
-admin.site.register(Tag, TagAdmin)
+admin.site.register(BMGTTag, TagAdmin)
