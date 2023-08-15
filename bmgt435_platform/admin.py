@@ -12,19 +12,19 @@ class BMGTUserAdmin(admin.ModelAdmin):
 
 
 class CaseAdmin(admin.ModelAdmin):
-    # fieldsets = [
-    #     ("None", {"fields": ["name", "case_description"]}),
-    # ]
+    fieldsets = [
+       ("None",  {"fields": ["name"]}),
+    ]
 
-    list_display = ["id", "name", "create_time", "visible"]
+    list_display = ["id", "name", "create_time", "visible",]
 
 
 class CaseRecordAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("None", {"fields": ["group_id", "case_id", "score",]}),
+        ("None", {"fields": ["group_id", "case_id", "state", "score",]}),
     ]
 
-    list_display = ["id", "group_id", "case_id", "score"]
+    list_display = ["id", "group_id", "case_id", "state", "score"]
 
 
 class GroupAdmin(admin.ModelAdmin):

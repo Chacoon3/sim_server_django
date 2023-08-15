@@ -6,8 +6,9 @@ from django.db import IntegrityError
 from .simulation.Cases import FoodCenter
 from .bmgtModels import *
 from .utils.statusCode import Status
-from .utils.jsonUtils import serialize_models, serialize_model_instance
-from .utils.apiUtils import api_error_handler, password_valid, generic_unary_query, generic_paginated_fetch
+from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulations
+from .utils.apiUtils import request_error_handler, password_valid, generic_unary_query, generic_paginated_fetch
+from .apps import BmgtPlatformConfig as appConfig
 
 import pandas as pd
 import json
@@ -28,7 +29,7 @@ class AuthApi:
         response.delete_cookie('id', samesite='none')
         response.delete_cookie('role', samesite='none')
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def sign_in(request: HttpRequest) -> HttpResponse:
@@ -55,7 +56,7 @@ class AuthApi:
 
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def sign_up(request: HttpRequest) -> HttpResponse:
@@ -86,7 +87,7 @@ class AuthApi:
 
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def password_reset(request: HttpRequest) -> HttpResponse:
@@ -94,7 +95,7 @@ class AuthApi:
         user_did = request.GET.get('did')
         raise NotImplementedError
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def sign_out(request: HttpRequest) -> HttpResponse:
@@ -106,7 +107,7 @@ class AuthApi:
 
 class UserApi:
 
-    @api_error_handler
+    @request_error_handler
     @require_GET
     @staticmethod
     def me(request: HttpRequest,) -> HttpResponse:
@@ -122,7 +123,7 @@ class UserApi:
 
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @staticmethod
     def users(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
@@ -159,7 +160,7 @@ class UserApi:
 
 class GroupApi:
 
-    @api_error_handler
+    @request_error_handler
     @staticmethod
     def groups(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
@@ -177,13 +178,13 @@ class GroupApi:
 
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @require_GET
     @staticmethod
     def groups_paginated(request: HttpRequest,) -> HttpResponse:
         return generic_paginated_fetch(BMGTGroup, request)
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def create_group(request: HttpRequest) -> HttpResponse:
@@ -208,7 +209,7 @@ class GroupApi:
 
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def join_group(request: HttpRequest) -> HttpResponse:
@@ -244,7 +245,7 @@ class GroupApi:
 
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def leave_group(request: HttpRequest) -> HttpResponse:
@@ -277,19 +278,19 @@ class GroupApi:
 
 
 class CaseApi:
-    @api_error_handler
+    @request_error_handler
     @require_GET
     @staticmethod
     def cases(request: HttpRequest) -> HttpResponse:
         return generic_unary_query(BMGTCase, request)
 
-    @api_error_handler
+    @request_error_handler
     @require_GET
     @staticmethod
     def cases_paginated(request: HttpRequest) -> HttpResponse:
         return generic_paginated_fetch(BMGTCase, request)
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def run_once(request: HttpRequest) -> HttpResponse:
@@ -320,7 +321,24 @@ class CaseApi:
 
         return resp
 
-    @api_error_handler
+    
+    @staticmethod
+    def onSubmitFinished(case_record_id:int,  simRes):
+        try:
+            case_record = BMGTCaseRecord.objects.get(id=case_record_id)
+            if simRes:
+                case_detail = serialize_simulations(simRes)
+                case_record.detail_json = case_detail
+                case_record.state = BMGTCaseRecord.BMGTCaseRecordState.SUCCESS
+            else:
+                case_record.state = BMGTCaseRecord.BMGTCaseRecordState.FAILED
+            case_record.save()
+        except Exception:
+            case_record.state = BMGTCaseRecord.BMGTCaseRecordState.FAILED
+            case_record.save()
+            raise
+
+    @request_error_handler
     @require_POST
     @staticmethod
     def submit(request: HttpRequest) -> HttpResponse:
@@ -334,11 +352,31 @@ class CaseApi:
                 group = user.group_id
                 data = json.loads(request.body)
                 case_id = data.get('case_id')
+                case = BMGTCase.objects.get(id=case_id)
                 count_submission = BMGTCaseRecord.objects.filter(
-                    case_id=case_id, group_id=group).count()
-                if count_submission < BMGTCase.objects.get(id=case_id).max_submission:
+                    case_id=case_id, group_id=user.group_id, 
+                    state__in = [
+                        BMGTCaseRecord.BMGTCaseRecordState.RUNNING, BMGTCaseRecord.BMGTCaseRecordState.SUCCESS]
+                    ).count()
+                if count_submission < case.max_submission:
                     # run logic
-                    pass
+                    match case_id:
+                        case '1':
+                            centers = data.get('centers')
+                            policies = data.get('policies')
+                            if centers and policies:
+                                caseInst = FoodCenter(centers, policies)
+                                case_record = BMGTCaseRecord(case_id = case, group_id = group,)
+                                case_record.save()
+                                appConfig.app_process_pool.apply_async(func = caseInst.run, callback=lambda res: CaseApi.onSubmitFinished(case_record.id, res))
+                                resp.write(serialize_model_instance(case_record))
+                                resp.status_code = Status.OK                                
+                            else:
+                                resp.write("Invalid data format!")
+                                resp.status_code = Status.INTERNAL_SERVER_ERROR
+                        case _:
+                            resp.write("Case not found!")
+                            resp.status_code = Status.NOT_FOUND
                 else:
                     resp.write(
                         "You have reached the maximum submission for this case!")
@@ -355,12 +393,12 @@ class CaseApi:
 
 
 class CaseRecordApi:
-    @api_error_handler
+    @request_error_handler
     @staticmethod
     def case_records(request: HttpRequest) -> HttpResponse:
         return generic_unary_query(BMGTCaseRecord, request)
 
-    @api_error_handler
+    @request_error_handler
     @require_GET
     @staticmethod
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
@@ -369,12 +407,12 @@ class CaseRecordApi:
 
 class TagApi:
 
-    @api_error_handler
+    @request_error_handler
     @staticmethod
     def tags(request: HttpRequest) -> HttpResponse:
         return generic_unary_query(BMGTTag, request)
 
-    @api_error_handler
+    @request_error_handler
     @require_GET
     @staticmethod
     def tags_paginated(request: HttpRequest) -> HttpResponse:
@@ -383,7 +421,7 @@ class TagApi:
 
 class ManageApi:
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def import_users(request: HttpRequest) -> HttpResponse:
@@ -417,7 +455,7 @@ class ManageApi:
 
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @staticmethod
     @require_POST
     def clean_groups(request: HttpRequest) -> HttpResponse:
@@ -431,7 +469,7 @@ class ManageApi:
         resp.write(f"{count_deleted} dirty groups deleted!")
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @require_POST
     @staticmethod
     def config_case(request: HttpRequest) -> HttpResponse:
@@ -443,7 +481,7 @@ class ManageApi:
 
         return resp
 
-    @api_error_handler
+    @request_error_handler
     @require_GET
     @staticmethod
     def view_users(request: HttpRequest) -> HttpResponse:

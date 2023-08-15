@@ -6,6 +6,7 @@ from django.http import HttpRequest, HttpResponse
 from .customExceptions import DataFormatError
 from .statusCode import Status
 from .jsonUtils import serialize_paginated_data, serialize_models
+from ..simulation.Cases import SimulationException
 
 import regex as re
 import json
@@ -18,7 +19,7 @@ def get_batch_size(listObj):
     return min(len(listObj), __BATCH_QUERY_SIZE)
 
 
-def api_error_handler(func):
+def request_error_handler(func):
     """
     API level exception handling
     """
@@ -65,6 +66,11 @@ def api_error_handler(func):
         except NotImplementedError as e:
             resp = HttpResponse()
             resp.status_code = Status.NOT_IMPLEMENTED
+            resp.write(e.args[0])
+
+        except SimulationException as e:
+            resp = HttpResponse()
+            resp.status_code = Status.BAD_REQUEST
             resp.write(e.args[0])
 
         except Exception as e:

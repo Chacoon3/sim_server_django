@@ -1,8 +1,16 @@
+from typing import Type
 import scipy
 import numpy as np
 import random as pyr
 import pandas as pd
 from queue import PriorityQueue as pQueue
+
+
+class SimulationException(Exception):
+    """
+    base class of all exceptions in this simulation platform
+    """
+    pass
 
 
 class Sampler(object):
@@ -111,31 +119,28 @@ class CaseBase(object):
 
     _msg_assert_err_ = "Invalid case setting. Simulation cannot execute!"
 
-    def __init__(self,) -> None:
+    def __init__(self,) -> None:   
         return
 
-    def _assert(self) -> bool:
+    def _assert_params(self) -> None:
         """
-        called before running to check if the parameter settings of the case is correct.
-        should be override for each case
+        should be called in the initiator of all subclasses
         """
-        return True
+        return
 
-    def simulate(self, simple_output: bool = True):
+    def simulate(self, ):
         '''
         the logic of one iteration in this simulation case
         simple_output should decide whether detailed statistics are to be recorded in each iteration
         '''
         return
 
-    def run(self, simple_output: bool = True, num_iterations=100):
+
+    def run(self, num_iterations=100):
         '''
         run the simulation case with specified number of iterations
         ouutput_style should decide whether detailed or simplified simulation statistics should be returned
         '''
-        if not self._assert():
-            raise Exception(CaseBase._msg_assert_err_)
-
         return
 
 
@@ -147,10 +152,7 @@ class CaseMC(CaseBase):
     def __init__(self,) -> None:
         return
 
-    def run(self, num_iterations: int = 100, simple_output: bool = True):
-        if not self._assert():
-            raise Exception(CaseBase._msg_assert_err_)
-
+    def run(self, num_iterations: int = 100, ):
         counter = num_iterations
         while (counter > 0):
             self.simulate(simple_output=simple_output)
@@ -168,10 +170,7 @@ class CaseDES(CaseBase):
         self.__t = 0    # timer
         self.__shouldStop = stopCondition
 
-    def run(self, simple_output: bool = True):
-        if not self._assert():
-            raise Exception(CaseBase._msg_assert_err_)
-
+    def run(self, ):
         while not (self.__shouldStop() or self.__pQueue.empty()):
             event = self.__pQueue.get()
             self.__t = event.time()
@@ -187,33 +186,19 @@ class CaseDES(CaseBase):
         return self.__t
 
 
-class CaseConfig(object):
-    def __init__(self) -> None:
-        return
+class SimulationResult(object):
+    def __init__(self, score:float, data:list) -> None:
+        self.__score = score
+        self.__data = data
 
+    @property
+    def score(self):
+        return self.__score
 
-# class FoodCenterConfig(CaseConfig):
-
-#     FIELDS = ["center_weekly_cost", "center_initial_inventory",
-#               "demand_cov_matrix", "holding_cost", "min_week_demand", "max_week_demand",
-#               "max_weekly_restock", "num_iterations", "num_weeks"]
-
-#     def __init__(self, **kwargs) -> None:
-#         self.center_weekly_cost: int | None = None
-#         self.center_initial_inventory: int | None = None
-#         self.demand_cov_matrix: np.ndarray | None = None
-#         self.holding_cost: float | None = None
-#         self.min_week_demand: int | None = None
-#         self.max_week_demand: int | None = None
-#         self.max_weekly_restock: int | None = None
-#         self.num_iterations: int | None = None
-#         self.num_weeks: int | None = None
-
-#         for field in FoodCenterConfig.FIELDS:
-#             if field in kwargs:
-#                 setattr(self, field, kwargs[field])
-#             else:
-#                 raise Exception("missing field: " + field)
+    @property
+    def data(self):
+        return self.__data
+        
 
 
 class FoodCenter(CaseMC):
@@ -253,7 +238,7 @@ class FoodCenter(CaseMC):
     __center_names = [str(i) for i in range(1, 7)]  # original entities are ['10', '13', '43', '52', '67', '137'] from the dataset
     __center_weekly_cost: int = 24000    # weekly fixed cost for a center
     __demand_mu_vector: list[int] = [2329, 2967, 2711, 2153, 1958, 2155]
-    __demand_cov_matrix: np.ndarray | None = np.array([
+    __demand_cov_matrix: np.ndarray = np.array([
         [113652.9946,	-37465.01062,	152.2425135,	102.7690763,	32011.70125,	89.03852468],
         [-37465.01062,	137223.4483,	100715.5776,	111.7531877,	-23449.91204,	103.1471614],
         [152.2425135,	100715.5776,	295682.0494,	151.5108562,	134.5415465,	-75566.93011],
@@ -264,9 +249,9 @@ class FoodCenter(CaseMC):
     __holding_cost: float = 10     # multiplier for holding cost
     __min_week_demand: int = 10
     __max_week_demand: int = 6000
-    __num_weeks: int = 8,
+    __num_weeks: int = 8
     __initial_inventory: int = 1000
-    __max_weekly_restock: int = 7000,
+    __max_weekly_restock: int = 7000
     __num_iterations: int = 100
 
     @staticmethod
@@ -277,8 +262,6 @@ class FoodCenter(CaseMC):
 
         # local path
         # r'C:\\Users\\Chaconne\\Documents\\学业\\Projects\\RA_Simulation\\app_server\\config\\case_food_center_cov_matrix.csv',
-        if not FoodCenter.__demand_cov_matrix:
-            raise  Exception("Covariance matrix not initialized")
 
         arr_demand = scipy.stats.multivariate_normal.rvs(
             mean=FoodCenter.__demand_mu_vector, cov=FoodCenter.__demand_cov_matrix, size=1)
@@ -298,23 +281,33 @@ class FoodCenter(CaseMC):
         self,
         centers: list[str] = [],
         policies: list[tuple[int, int]] | list[list[int]] = [],
-    ) -> None:
+    ):
 
         super().__init__()
         self.__centers = centers
         self.__policies = policies
+        self._assert_params()
 
-    def _assert(self) -> bool:
-        value_valid = self.__num_iterations > 0 and len(self.__centers) > 0 and len(
-            self.__centers) == len(self.__policies) and self.__num_weeks > 0
+    def _assert_params(self) -> None:
+        config_valid = self.__num_iterations > 0 and  self.__num_weeks > 0
+
+        format_valid = len(self.__centers) == len(self.__policies) and len(self.__centers) > 0
+
         location_valid = all(
             [l in FoodCenter.__center_names for l in self.__centers])
-        policy_valid = all([p[0] > 0 and p[1] > p[0] for p in self.__policies])
+        
+        policy_valid = all([p[0] >= 0 and p[1] > p[0] for p in self.__policies])
+        
+        if not config_valid:
+            raise SimulationException("Invalid config for FoodCenter simulation")
+        elif not format_valid:
+            raise SimulationException("Invalid format for FoodCenter simulation")
+        elif not location_valid:
+            raise SimulationException("Invalid location for FoodCenter simulation")
+        elif not policy_valid:
+            raise SimulationException("Invalid policy for FoodCenter simulation")
 
-        valid = value_valid and location_valid and policy_valid
-        return valid
-
-    def simulate(self, simple_output: bool = True):
+    def simulate(self, ):
         # instantialize centers
         centers = []
         for center_index in range(len(self.__centers)):
@@ -335,14 +328,15 @@ class FoodCenter(CaseMC):
                 'cum_revenue': 0,
                 'cum_holding_cost': 0,
 
-                'prior_inventory': [],
-                'post_inventory': [],
-                'demand': [],
-                'supply': [],
-                'shortage_count': [],
-                'shortage_amount': [],
-                'revenue': [],
-                'holding_cost': []
+                # keys below are for detailed output
+                # 'prior_inventory': [],
+                # 'post_inventory': [],
+                # 'demand': [],
+                # 'supply': [],
+                # 'shortage_count': [],
+                # 'shortage_amount': [],
+                # 'revenue': [],
+                # 'holding_cost': []
             }
             for center in centers
         }
@@ -443,15 +437,15 @@ class FoodCenter(CaseMC):
                     history[c_name]['cum_revenue'] + order_revenue, 2)
                 history[c_name]['cum_holding_cost'] += holding_cost
 
-                if not simple_output:
-                    history[c_name]['prior_inventory'].append(prior_inv)
-                    history[c_name]['post_inventory'].append(post_inv)
-                    history[c_name]['demand'].append(demand)
-                    history[c_name]['supply'].append(supply)
-                    history[c_name]['shortage_count'].append(shortage_count)
-                    history[c_name]['shortage_amount'].append(shortage_penalty)
-                    history[c_name]['revenue'].append(order_revenue)
-                    history[c_name]['holding_cost'].append(holding_cost)
+                # if not simple_output:
+                #     history[c_name]['prior_inventory'].append(prior_inv)
+                #     history[c_name]['post_inventory'].append(post_inv)
+                #     history[c_name]['demand'].append(demand)
+                #     history[c_name]['supply'].append(supply)
+                #     history[c_name]['shortage_count'].append(shortage_count)
+                #     history[c_name]['shortage_amount'].append(shortage_penalty)
+                #     history[c_name]['revenue'].append(order_revenue)
+                #     history[c_name]['holding_cost'].append(holding_cost)
 
         # perform aggregation
         output['total_revenue'] = round(sum([
@@ -475,10 +469,7 @@ class FoodCenter(CaseMC):
         )
         return output
 
-    def run(self, simple_output: bool = True):
-        if not self._assert():
-            raise Exception(CaseBase._msg_assert_err_)
-
+    def run(self, ):
         counter = self.__num_iterations
         res = []
         while (counter > 0):

@@ -167,9 +167,15 @@ class BMGTCaseRecord(DbModelBase):
 
     query_editable_fields = ["group_id", "case_id", "score", "detail_json", ]
 
+    class BMGTCaseRecordState(models.IntegerChoices):
+        RUNNING = 0
+        SUCCESS = 1
+        FAILED = 2
+
     group_id = models.ForeignKey(BMGTGroup, on_delete=models.SET_NULL, null=True,)
     case_id = models.ForeignKey(BMGTCase, on_delete=models.SET_NULL, null=True,)
-    score = models.FloatField(null=True)
+    score = models.FloatField(null=True, default=None)
+    state = models.IntegerField(BMGTCaseRecordState.choices, default=BMGTCaseRecordState.RUNNING, null=False)
     detail_json = models.TextField(null=False, default='')
 
     def as_dictionary(self) -> dict:
@@ -180,6 +186,7 @@ class BMGTCaseRecord(DbModelBase):
             group_name = self.group_id.name,
             case_id=self.case_id.id,
             case_name = self.case_id.name,
+            state = self.BMGTCaseRecordState.choices[self.state],
             score=self.score,
             detail_json=self.detail_json,
         )

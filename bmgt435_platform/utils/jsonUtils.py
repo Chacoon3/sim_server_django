@@ -9,11 +9,11 @@ import datetime
 class CustomJSONEncoder(json.JSONEncoder):
 
     def default(self, obj):
-        if type(obj) is datetime.datetime:
+        if isinstance(obj, datetime.datetime):
             return obj.astimezone().isoformat()
-        elif type(obj) is np.integer:
+        elif isinstance(obj, np.integer):
             return int(obj)
-        elif type(obj) is np.floating:
+        elif isinstance(obj, np.floating):
             return float(obj)
         else:
             return super().default(obj)
@@ -38,4 +38,4 @@ def serialize_paginated_data(paginator, pageIndex: int) -> str:
 
 
 def serialize_simulations(result) -> str:
-    raise NotImplementedError
+    return json.dumps(result, cls=CustomJSONEncoder)
