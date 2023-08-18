@@ -1,5 +1,7 @@
 from django.db.models import QuerySet
+from bmgt435_platform.simulation.Cases import SimulationResult
 from ..bmgtModels import DbModelBase
+
 import numpy as np
 import json
 import datetime
@@ -37,5 +39,5 @@ def serialize_paginated_data(paginator, pageIndex: int) -> str:
     })
 
 
-def serialize_simulations(result) -> str:
-    return json.dumps(result, cls=CustomJSONEncoder)
+def serialize_simulation_result(result: SimulationResult) -> str:
+    return json.dumps(result.iteration_dataframe, cls=CustomJSONEncoder)

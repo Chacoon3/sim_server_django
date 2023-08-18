@@ -29,20 +29,20 @@ if DEBUG:
 
 ALLOWED_HOSTS = []
 
+MEDIA_ROOT = BASE_DIR.absolute().as_posix() + '/media/'
+
+print('Media root is \t', MEDIA_ROOT)
 
 # Application definition
 
 INSTALLED_APPS = [
     "bmgt435_platform.apps.BmgtPlatformConfig",
-    #  'rest_framework',
-    # "polls.apps.PollsConfig",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # "debug_toolbar",
 ]
 
 MIDDLEWARE = [
@@ -77,6 +77,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'sim_server_django.wsgi.application'
+ASGI_APPLICATION = 'sim_server_django.asgi.application'
 
 
 # Database
@@ -130,7 +131,6 @@ TIME_ZONE = 'America/New_York'
 USE_I18N = False
 
 USE_TZ = True
-
 
 STATIC_URL = 'static/'
 

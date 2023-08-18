@@ -3,16 +3,19 @@ from django.views.decorators.http import require_POST, require_GET,  require_htt
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import IntegrityError
 
+from .apps import app_fs as app_file_system
 from .simulation.Cases import FoodCenter
 from .bmgtModels import *
 from .utils.statusCode import Status
-from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulations
+from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulation_result
 from .utils.apiUtils import request_error_handler, password_valid, generic_unary_query, generic_paginated_fetch
-from .apps import BmgtPlatformConfig as appConfig
 
 import pandas as pd
 import json
 import io
+
+
+CASE_RECORD_PATH = app_file_system.base_location.__str__() + "/case_records/"
 
 
 class AuthApi:
@@ -161,20 +164,20 @@ class UserApi:
 class GroupApi:
 
     @request_error_handler
+    @require_GET
     @staticmethod
-    def groups(request: HttpRequest) -> HttpResponse:
+    def get_group(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
-
-        match request.method:
-            case 'GET':
-                params = request.GET.dict()
-                groups = BMGTGroup.objects.filter(**params, )
-                resp.write(serialize_models(groups))
-                resp.status_code = Status.OK
-
-            case _:
-                resp.write("Method not allowed!")
-                resp.status_code = Status.METHOD_NOT_ALLOWED
+        group_id = request.GET.get('id', None)
+        group_id = int(group_id) if group_id else None
+        group_query = BMGTGroup.objects.filter(id = group_id )
+        if group_query.exists():
+            group = group_query.get()
+            resp.write(serialize_model_instance(group))
+            resp.status_code = Status.OK
+        else:
+            resp.write("Group not found!")
+            resp.status_code = Status.NOT_FOUND
 
         return resp
 
@@ -196,15 +199,15 @@ class GroupApi:
             user = BMGTUser.objects.get(
                 id=user_id, activated=1, )
         if user.group_id == None:
-                new_group = BMGTGroup.objects.create()
-                new_group.save()
-                user.group_id = new_group
-                user.save()
-                resp.write(serialize_model_instance(new_group))
-                resp.status_code = Status.CREATED
+            new_group = BMGTGroup.objects.create()
+            new_group.save()
+            user.group_id = new_group
+            user.save()
+            resp.write(serialize_model_instance(new_group))
+            resp.status_code = Status.CREATED
         else:
             resp.write(
-                        "Cannot create another group while you are alreay in a group!")
+                "Cannot create another group while you are alreay in a group!")
             resp.status_code = Status.BAD_REQUEST
 
         return resp
@@ -281,8 +284,18 @@ class CaseApi:
     @request_error_handler
     @require_GET
     @staticmethod
-    def cases(request: HttpRequest) -> HttpResponse:
-        return generic_unary_query(BMGTCase, request)
+    def get_case(request: HttpRequest) -> HttpResponse:
+        resp = HttpResponse()
+        case_id = request.GET.get('case_id', None)
+        case_query = case_id and BMGTCase.objects.filter(
+            id=case_id, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS)
+        if case_query.exists():
+            case = case_query.get()
+            resp.write(serialize_model_instance(case))
+            resp.status_code = Status.OK
+        else:
+            resp.write("Case not found!")
+            resp.status_code = Status.NOT_FOUND
 
     @request_error_handler
     @require_GET
@@ -290,49 +303,50 @@ class CaseApi:
     def cases_paginated(request: HttpRequest) -> HttpResponse:
         return generic_paginated_fetch(BMGTCase, request)
 
-    @request_error_handler
-    @require_POST
-    @staticmethod
-    def run_once(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        data = json.loads(request.body)
-        case_id = data.get('case_id')
-        group_id = data.get('group_id')
-        if not case_id:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("Case not found!")
-        elif not group_id:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("You must join a group to run the simulation!")
-        else:
-            match case_id:
-                case '1':
-                    caseInst = FoodCenter(num_iterations=100, centers=[
-                                          '13', ], policies=[(100, 3000)])
-                    res = caseInst.simulate(True)
-                    case_detail = json.dumps(res)
-                    resp.status_code = Status.OK
-                    resp.write(case_detail)
-                    new_case_record = BMGTCaseRecord(
-                        case_id=1, case_detail=case_detail)
-                case _:
-                    resp.status_code = Status.NOT_FOUND
-                    resp.write("Case not found!")
+    # @request_error_handler
+    # @require_POST
+    # @staticmethod
+    # def run_once(request: HttpRequest) -> HttpResponse:
+    #     resp = HttpResponse()
+    #     data = json.loads(request.body)
+    #     case_id = data.get('case_id')
+    #     group_id = data.get('group_id')
+    #     if not case_id:
+    #         resp.status_code = Status.NOT_FOUND
+    #         resp.write("Case not found!")
+    #     elif not group_id:
+    #         resp.status_code = Status.BAD_REQUEST
+    #         resp.write("You must join a group to run the simulation!")
+    #     else:
+    #         match case_id:
+    #             case '1':
+    #                 caseInst = FoodCenter(num_iterations=100, centers=[
+    #                                       '13', ], policies=[(100, 3000)])
+    #                 res = caseInst.simulate(True)
+    #                 case_detail = json.dumps(res)
+    #                 resp.status_code = Status.OK
+    #                 resp.write(case_detail)
+    #                 new_case_record = BMGTCaseRecord(
+    #                     case_id=1, case_detail=case_detail)
+    #             case _:
+    #                 resp.status_code = Status.NOT_FOUND
+    #                 resp.write("Case not found!")
 
-        return resp
+    #     return resp
 
-    
     @staticmethod
-    def onSubmitFinished(case_record_id:int,  simRes):
+    def onCaseCompleted(case_record_id: int,  simRes):
         try:
             case_record = BMGTCaseRecord.objects.get(id=case_record_id)
             if simRes:
-                case_detail = serialize_simulations(simRes)
+                case_detail = serialize_simulation_result(simRes)
                 case_record.detail_json = case_detail
+                case_record.score = simRes.score
                 case_record.state = BMGTCaseRecord.BMGTCaseRecordState.SUCCESS
             else:
                 case_record.state = BMGTCaseRecord.BMGTCaseRecordState.FAILED
             case_record.save()
+
         except Exception:
             case_record.state = BMGTCaseRecord.BMGTCaseRecordState.FAILED
             case_record.save()
@@ -344,33 +358,45 @@ class CaseApi:
     def submit(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
         user_id = request.COOKIES.get('id', None)
-        user = BMGTUser.objects.filter(
-            id=user_id, activated=1, )
+        user = BMGTUser.objects.filter(id=user_id, activated=1, )
         if user.exists():
             user = user.get()
             if user.group_id != None:
                 group = user.group_id
                 data = json.loads(request.body)
-                case_id = data.get('case_id')
+                case_id = int(data.get('case_id'))
                 case = BMGTCase.objects.get(id=case_id)
                 count_submission = BMGTCaseRecord.objects.filter(
-                    case_id=case_id, group_id=user.group_id, 
-                    state__in = [
+                    case_id=case_id, group_id=user.group_id,
+                    state__in=[
                         BMGTCaseRecord.BMGTCaseRecordState.RUNNING, BMGTCaseRecord.BMGTCaseRecordState.SUCCESS]
-                    ).count()
-                if count_submission < case.max_submission:
+                ).count()
+                if case.max_submission == -1 or count_submission < case.max_submission:
                     # run logic
                     match case_id:
-                        case '1':
-                            centers = data.get('centers')
-                            policies = data.get('policies')
-                            if centers and policies:
-                                caseInst = FoodCenter(centers, policies)
-                                case_record = BMGTCaseRecord(case_id = case, group_id = group,)
+                        case 1:
+                            params = data.get('case_params')
+                            if params:
+                                # original logic using multiprocessing
+
+                                # caseInst = FoodCenter(**params)
+                                # case_record = BMGTCaseRecord(case_id = case, group_id = group,)
+                                # case_record.save()
+                                # appConfig.app_process_pool.apply_async(func = caseInst.run, callback=lambda res: CaseApi.onCaseCompleted(case_record.id, res))
+                                # resp.write(serialize_model_instance(case_record))
+                                # resp.status_code = Status.OK
+                                #
+                                #  blocking logic
+                                caseInst = FoodCenter(**params)
+                                res = caseInst.run()
+                                record_bytes = res.as_bytes()
+                                case_record = BMGTCaseRecord(
+                                    case_id=case, group_id=group, score=res.score, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS)
                                 case_record.save()
-                                appConfig.app_process_pool.apply_async(func = caseInst.run, callback=lambda res: CaseApi.onSubmitFinished(case_record.id, res))
-                                resp.write(serialize_model_instance(case_record))
-                                resp.status_code = Status.OK                                
+                                app_file_system.save(
+                                    case_record.case_record_file_name, record_bytes)
+                                resp.write(res.as_json())
+                                resp.status_code = Status.OK
                             else:
                                 resp.write("Invalid data format!")
                                 resp.status_code = Status.INTERNAL_SERVER_ERROR
@@ -395,14 +421,37 @@ class CaseApi:
 class CaseRecordApi:
     @request_error_handler
     @staticmethod
-    def case_records(request: HttpRequest) -> HttpResponse:
-        return generic_unary_query(BMGTCaseRecord, request)
+    def get_case_record(request: HttpRequest) -> HttpResponse:
+        resp = HttpResponse()
+        case_record_id = request.GET.get('case_record_id', None)
+        case_record_query = case_record_id and BMGTCaseRecord.objects.filter(
+            id=case_record_id, )
+        if case_record_query.exists():
+            case_record = case_record_query.get()
+            resp.write(serialize_model_instance(case_record))
+            resp.status_code = Status.OK
+        else:
+            resp.write("Case record not found!")
+            resp.status_code = Status.NOT_FOUND
+
+        return resp
+
+    @request_error_handler
+    @require_GET
+    @staticmethod
+    def get_case_record_file(request: HttpRequest) -> HttpResponse:
+        resp = HttpResponse()
+        case_record_id = request.GET.get('case_record_id', None)
+        case_record_query = BMGTCaseRecord.objects.filter(
+            id=case_record_id, )
+        if case_record_query.exists():
+            pass
 
     @request_error_handler
     @require_GET
     @staticmethod
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_fetch(BMGTCaseRecord, request)
+        return generic_paginated_fetch(BMGTCaseRecord, request, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS)
 
 
 class TagApi:
@@ -430,12 +479,12 @@ class ManageApi:
             with io.BytesIO(request.body) as file:
                 user_csv = pd.read_csv(file, encoding='utf-8')
                 format_valid = len(user_csv.columns) == 3 and all(user_csv.columns == [
-                                   'user_first_name', 'user_last_name', 'directory_id'])
+                    'user_first_name', 'user_last_name', 'directory_id'])
                 if format_valid:
                     user_csv.columns = ['first_name', 'last_name', 'did']
                     user_csv.applymap(lambda x: x.strip())
                     obj_set = [BMGTUser(**row)
-                                        for row in user_csv.to_dict('records')]
+                               for row in user_csv.to_dict('records')]
                     try:
                         BMGTUser.objects.bulk_create(obj_set, batch_size=40)
                         resp.status_code = Status.OK

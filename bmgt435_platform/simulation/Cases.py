@@ -1,9 +1,10 @@
-from typing import Type
 import scipy
+import pandas as pd
 import numpy as np
 import random as pyr
-import pandas as pd
+import openpyxl
 from queue import PriorityQueue as pQueue
+from io import BytesIO
 
 
 class SimulationException(Exception):
@@ -112,6 +113,46 @@ class Sampler(object):
         return val_arr
 
 
+class SimulationResult(object):
+    """
+    abstraction of simulation result"
+    """
+    def __init__(self, score: float, aggregated_data: pd.DataFrame = None, iteration_data = None) -> None:
+        """
+        score is the single metric used to evaluate a simulation strategy
+        per_iteration_data is a list of data collected in each iteration
+        """
+        self.__score = score
+        self.__aggregation_dataframe = aggregated_data
+        self.__iteration_dataframe = iteration_data
+
+    @property
+    def score(self):
+        return self.__score
+
+    @property
+    def aggregation_dataframe(self) -> pd.DataFrame:
+        return self.__aggregation_dataframe
+
+    @property
+    def iteration_dataframe(self):
+        return self.__iteration_dataframe
+    
+    def as_bytes(self) -> BytesIO:
+        """
+        returns the simulation result as an IO bytes for server-side persistence
+        """
+
+        raise NotImplementedError()
+
+    def as_json(self) -> str:
+        """
+        returns the simulation result as a json string for client-side rendering
+        """
+        raise NotImplementedError()
+
+
+
 class CaseBase(object):
     """
     Base class of all the simulation cases
@@ -119,45 +160,34 @@ class CaseBase(object):
 
     _msg_assert_err_ = "Invalid case setting. Simulation cannot execute!"
 
-    def __init__(self,) -> None:   
+    def __init__(self,) -> None:
         return
 
     def _assert_params(self) -> None:
         """
         should be called in the initiator of all subclasses
         """
-        return
+        raise NotImplementedError()
+
+    @staticmethod
+    def score(obj) -> float:
+        """
+        returns the score of the simulation
+        """
+        raise NotImplementedError()
 
     def simulate(self, ):
         '''
         the logic of one iteration in this simulation case
-        simple_output should decide whether detailed statistics are to be recorded in each iteration
         '''
-        return
+        raise NotImplementedError()
 
-
-    def run(self, num_iterations=100):
+    def run(self, num_iterations=100) -> SimulationResult:
         '''
         run the simulation case with specified number of iterations
         ouutput_style should decide whether detailed or simplified simulation statistics should be returned
         '''
-        return
-
-
-class CaseMC(CaseBase):
-    """
-    base class of Monte Carlo simulation cases
-    """
-
-    def __init__(self,) -> None:
-        return
-
-    def run(self, num_iterations: int = 100, ):
-        counter = num_iterations
-        while (counter > 0):
-            self.simulate(simple_output=simple_output)
-            counter -= 1
-        return
+        raise NotImplementedError()
 
 
 class CaseDES(CaseBase):
@@ -186,22 +216,31 @@ class CaseDES(CaseBase):
         return self.__t
 
 
-class SimulationResult(object):
-    def __init__(self, score:float, data:list) -> None:
-        self.__score = score
-        self.__data = data
+class FoodCenterResult(SimulationResult):
 
-    @property
-    def score(self):
-        return self.__score
-
-    @property
-    def data(self):
-        return self.__data
+    def as_bytes(self):
+        wb = openpyxl.Workbook(write_only=True)
+        main_sheet = wb.create_sheet('main')
+        main_sheet.append(self.aggregation_dataframe.columns.tolist())
+        for row in self.aggregation_dataframe.values.tolist():
+            main_sheet.append(row)
         
+        detail_sheet = wb.create_sheet('detail')
+        detail_sheet.append(self.iteration_dataframe.columns.tolist())
+        for row in self.iteration_dataframe.values.tolist():
+            detail_sheet.append(row)
+    
+        bytes_io = BytesIO()
+        wb.save(filename=bytes_io)
+        bytes_io.seek(0)
+        return bytes_io
+    
+
+    def as_json(self):
+        return self.aggregation_dataframe.loc[0,].to_json()
 
 
-class FoodCenter(CaseMC):
+class FoodCenter(CaseBase):
 
     class Center(object):
         """
@@ -235,24 +274,31 @@ class FoodCenter(CaseMC):
 
     # static members
 
-    __center_names = [str(i) for i in range(1, 7)]  # original entities are ['10', '13', '43', '52', '67', '137'] from the dataset
+    # original entities are ['10', '13', '43', '52', '67', '137'] from the dataset
+    __center_names = [str(i) for i in range(1, 7)]
     __center_weekly_cost: int = 24000    # weekly fixed cost for a center
     __demand_mu_vector: list[int] = [2329, 2967, 2711, 2153, 1958, 2155]
     __demand_cov_matrix: np.ndarray = np.array([
-        [113652.9946,	-37465.01062,	152.2425135,	102.7690763,	32011.70125,	89.03852468],
-        [-37465.01062,	137223.4483,	100715.5776,	111.7531877,	-23449.91204,	103.1471614],
-        [152.2425135,	100715.5776,	295682.0494,	151.5108562,	134.5415465,	-75566.93011],
-        [102.7690763,	111.7531877,	151.5108562,	137073.65,	101.4975821,	94.87283555],
-        [32011.70125,	-23449.91204,	134.5415465,	101.4975821,	100183.0197,	91.92860568],
-        [89.03852468,	103.1471614,	-75566.93011,	94.87283555,	91.92860568,	120703.1537]
+        [113652.9946,	-37465.01062,	152.2425135,
+            102.7690763,	32011.70125,	89.03852468],
+        [-37465.01062,	137223.4483,	100715.5776,
+            111.7531877,	-23449.91204,	103.1471614],
+        [152.2425135,	100715.5776,	295682.0494,
+            151.5108562,	134.5415465,	-75566.93011],
+        [102.7690763,	111.7531877,	151.5108562,
+            137073.65,	101.4975821,	94.87283555],
+        [32011.70125,	-23449.91204,	134.5415465,
+            101.4975821,	100183.0197,	91.92860568],
+        [89.03852468,	103.1471614,	-75566.93011,
+            94.87283555,	91.92860568,	120703.1537]
     ])
     __holding_cost: float = 10     # multiplier for holding cost
     __min_week_demand: int = 10
     __max_week_demand: int = 6000
-    __num_weeks: int = 8
+    __num_weeks: int = 52
     __initial_inventory: int = 1000
     __max_weekly_restock: int = 7000
-    __num_iterations: int = 100
+    __num_iterations: int = 1
 
     @staticmethod
     def sim_center_demand():
@@ -260,15 +306,12 @@ class FoodCenter(CaseMC):
         returns discretized, truncated demand of all the six centers regardless of whether it is chosen, stored in a dict where keys are center ids
         """
 
-        # local path
-        # r'C:\\Users\\Chaconne\\Documents\\学业\\Projects\\RA_Simulation\\app_server\\config\\case_food_center_cov_matrix.csv',
-
         arr_demand = scipy.stats.multivariate_normal.rvs(
             mean=FoodCenter.__demand_mu_vector, cov=FoodCenter.__demand_cov_matrix, size=1)
         return {
-            k: min(max(FoodCenter.__min_week_demand, round(d)),
+            center_name: min(max(FoodCenter.__min_week_demand, round(center_demand)),
                    FoodCenter.__max_week_demand)
-            for k, d in zip(FoodCenter.__center_names, arr_demand)
+            for center_name, center_demand in zip(FoodCenter.__center_names, arr_demand)
         }
 
     @staticmethod
@@ -289,25 +332,46 @@ class FoodCenter(CaseMC):
         self._assert_params()
 
     def _assert_params(self) -> None:
-        config_valid = self.__num_iterations > 0 and  self.__num_weeks > 0
+        config_valid = self.__num_iterations > 0 and self.__num_weeks > 0
 
-        format_valid = len(self.__centers) == len(self.__policies) and len(self.__centers) > 0
+        format_valid = len(self.__centers) == len(
+            self.__policies) and len(self.__centers) > 0
 
         location_valid = all(
             [l in FoodCenter.__center_names for l in self.__centers])
-        
-        policy_valid = all([p[0] >= 0 and p[1] > p[0] for p in self.__policies])
-        
-        if not config_valid:
-            raise SimulationException("Invalid config for FoodCenter simulation")
-        elif not format_valid:
-            raise SimulationException("Invalid format for FoodCenter simulation")
-        elif not location_valid:
-            raise SimulationException("Invalid location for FoodCenter simulation")
-        elif not policy_valid:
-            raise SimulationException("Invalid policy for FoodCenter simulation")
 
-    def simulate(self, ):
+        policy_valid = all([p[0] >= 0 and p[1] > p[0]
+                           for p in self.__policies])
+
+        if not config_valid:
+            raise SimulationException(
+                "Simulation failed. The current case config is invalid. Please report this to the administrator.")
+        elif not format_valid:
+            raise SimulationException(
+                "Invalid parameters. Please select at least one location and assign s-S policies to each location.")
+        elif not location_valid:
+            raise SimulationException(
+                "Simulation failed. Please report the issue.")
+        elif not policy_valid:
+            raise SimulationException(
+                "Simulation failed. s policy must be non-negative and S policy must be greater than s policy")
+
+    perf_lower_bound = -800000
+    perf_upper_bound = 1200000
+
+    @staticmethod
+    def score(obj) -> float:
+        """
+        returns the score of the simulation
+        """
+        avg_profit = obj['perf_metric']
+        avg_profit = (avg_profit - FoodCenter.perf_lower_bound) / \
+            (FoodCenter.perf_upper_bound - FoodCenter.perf_lower_bound)
+        avg_profit = 1 / (1 + np.exp(-avg_profit))
+        avg_profit = round(avg_profit * 100, 3) 
+        return avg_profit
+
+    def simulate(self):
         # instantialize centers
         centers = []
         for center_index in range(len(self.__centers)):
@@ -317,26 +381,26 @@ class FoodCenter(CaseMC):
                 policy=policy, initial_inventory=self.__initial_inventory, name=name))
 
         # define the output data:
-        #       the output data describes one instance of the simulation
-        #       a nested dictionary to store the weekly state of each center and thereby yield the aggregation statistics
+        #       the output data describes one iteration of the simulation
+        #       a nested dictionary is used to store the weekly state of each center and thereby yield the aggregation statistics
         history = {
             center.get_name(): {
-                'cum_demand': 0,
-                'cum_supply': 0,
-                'cum_shortage_count': 0,
-                'cum_shortage_amount': 0,
-                'cum_revenue': 0,
-                'cum_holding_cost': 0,
+                # 'cum_demand': 0,
+                # 'cum_supply': 0,
+                # 'cum_shortage_count': 0,
+                # 'cum_shortage_amount': 0,
+                # 'cum_revenue': 0,
+                # 'cum_holding_cost': 0,
 
                 # keys below are for detailed output
-                # 'prior_inventory': [],
-                # 'post_inventory': [],
-                # 'demand': [],
-                # 'supply': [],
-                # 'shortage_count': [],
-                # 'shortage_amount': [],
-                # 'revenue': [],
-                # 'holding_cost': []
+                'prior_inventory': [],
+                'post_inventory': [],
+                'demand': [],
+                'supply': [],
+                'shortage_count': [],
+                'shortage_amount': [],
+                'revenue': [],
+                'holding_cost': []
             }
             for center in centers
         }
@@ -414,9 +478,9 @@ class FoodCenter(CaseMC):
                 supply = center_supply[i]
                 shortage_count = max(0, demand - supply)
                 arr_order_price = FoodCenter.sim_checkout_price(size=demand)
-                # orders that are met
+                # orders covered
                 covered_order_price = arr_order_price[:supply]
-                # orders that are failed to meet
+                # orders failed to cover
                 lost_order_price = arr_order_price[supply:]
                 order_revenue = round(sum(covered_order_price), 2)
                 shortage_penalty = round(sum(lost_order_price), 2)
@@ -428,37 +492,36 @@ class FoodCenter(CaseMC):
                 post_inv = center.get_inventory()
                 holding_cost = prior_inv * FoodCenter.__holding_cost
 
-                history[c_name]['cum_demand'] += demand
-                history[c_name]['cum_supply'] += supply
-                history[c_name]['cum_shortage_count'] += shortage_count
-                history[c_name]['cum_shortage_amount'] = round(
-                    history[c_name]['cum_shortage_amount'] + shortage_penalty, 2)
-                history[c_name]['cum_revenue'] = round(
-                    history[c_name]['cum_revenue'] + order_revenue, 2)
-                history[c_name]['cum_holding_cost'] += holding_cost
+                # history[c_name]['cum_demand'] += demand
+                # history[c_name]['cum_supply'] += supply
+                # history[c_name]['cum_shortage_count'] += shortage_count
+                # history[c_name]['cum_shortage_amount'] = round(
+                #     history[c_name]['cum_shortage_amount'] + shortage_penalty, 2)
+                # history[c_name]['cum_revenue'] = round(
+                #     history[c_name]['cum_revenue'] + order_revenue, 2)
+                # history[c_name]['cum_holding_cost'] += holding_cost
 
-                # if not simple_output:
-                #     history[c_name]['prior_inventory'].append(prior_inv)
-                #     history[c_name]['post_inventory'].append(post_inv)
-                #     history[c_name]['demand'].append(demand)
-                #     history[c_name]['supply'].append(supply)
-                #     history[c_name]['shortage_count'].append(shortage_count)
-                #     history[c_name]['shortage_amount'].append(shortage_penalty)
-                #     history[c_name]['revenue'].append(order_revenue)
-                #     history[c_name]['holding_cost'].append(holding_cost)
+                history[c_name]['prior_inventory'].append(prior_inv)
+                history[c_name]['post_inventory'].append(post_inv)
+                history[c_name]['demand'].append(demand)
+                history[c_name]['supply'].append(supply)
+                history[c_name]['shortage_count'].append(shortage_count)
+                history[c_name]['shortage_amount'].append(shortage_penalty)
+                history[c_name]['revenue'].append(order_revenue)
+                history[c_name]['holding_cost'].append(holding_cost)
 
         # perform aggregation
         output['total_revenue'] = round(sum([
-            history[c.get_name()]['cum_revenue'] for c in centers
+            sum(history[c.get_name()]['revenue']) for c in centers
         ]), 2)
         output['total_shortage_count'] = round(sum([
-            history[c.get_name()]['cum_shortage_count'] for c in centers
+            sum(history[c.get_name()]['shortage_count']) for c in centers
         ]), 2)
         output['total_shortage_amount'] = round(sum([
-            history[c.get_name()]['cum_shortage_amount'] for c in centers
+            sum(history[c.get_name()]['shortage_amount']) for c in centers
         ]), 2)
         output['total_holding_cost'] = sum([
-            history[c.get_name()]['cum_holding_cost'] for c in centers
+            sum(history[c.get_name()]['holding_cost']) for c in centers
         ])
         output['total_fixed_cost'] = len(
             centers) * self.__num_weeks * FoodCenter.__center_weekly_cost
@@ -469,12 +532,21 @@ class FoodCenter(CaseMC):
         )
         return output
 
-    def run(self, ):
-        counter = self.__num_iterations
-        res = []
-        while (counter > 0):
-            sim_output = self.simulate(simple_output=simple_output)
-            res.append(sim_output)
-            counter -= 1
+    def run(self):
+        res = self.simulate()
+        score = self.score(res)
+        history = res.pop('history')
+        df_aggregated_statistics = pd.DataFrame(res, index=[0])
+        arr_df_per_center_statistics = [
+            pd.DataFrame(history[center_name]) for center_name in history.keys()
+        ]
 
-        return res
+        for centerwise_df, c_name in zip(arr_df_per_center_statistics, history.keys()):
+            # add center name and week index columns
+            centerwise_df['center'] = c_name
+            centerwise_df['week'] = range(1, FoodCenter.__num_weeks + 1)
+
+        df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
+
+        simRes = FoodCenterResult(score, df_aggregated_statistics, df_per_center_statistics)
+        return simRes

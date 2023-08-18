@@ -45,8 +45,8 @@ def request_error_handler(func):
 
         except KeyError as e:
             resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(e.args[0])
+            resp.status_code = Status.INTERNAL_SERVER_ERROR
+            resp.write(f'Key missing: {e.args[0]}')
 
         except IntegrityError as e:
             resp = HttpResponse()
@@ -73,9 +73,15 @@ def request_error_handler(func):
             resp.status_code = Status.BAD_REQUEST
             resp.write(e.args[0])
 
-        except Exception as e:
-            raise
+        except ValueError as e:
+            resp = HttpResponse()
+            resp.write(e.args[0])
+            resp.status_code = Status.INTERNAL_SERVER_ERROR
 
+        except Exception as e:
+            resp = HttpResponse()
+            resp.write(e.args[0])
+            resp.status_code = Status.INTERNAL_SERVER_ERROR
 
         return resp
 
@@ -93,7 +99,7 @@ def password_valid(password: str) -> bool:
     return leng_valid and has_char and has_num
 
 
-def get_paginator_params(request:HttpRequest) -> dict:
+def get_paginator_params(request: HttpRequest) -> dict:
     params = {}
     params['page'] = request.GET.get('page', None)
     params['size'] = request.GET.get('size', None)
@@ -108,7 +114,6 @@ def get_paginator_params(request:HttpRequest) -> dict:
     return params
 
 
-
 def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
     """
     generic query on one table
@@ -119,7 +124,6 @@ def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
     if request.method == "GET":
 
         params = request.GET.dict()
-        params['flag_deleted'] = '0'
         obj_set = cls.objects.filter(**params)
         if obj_set:
             resp.write(serialize_models(obj_set))
@@ -128,24 +132,6 @@ def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
             resp.status_code = Status.NOT_FOUND
             resp.write("The requested resource does not exist!")
 
-    elif request.method == "DELETE":
-        params = request.GET.dict()
-        if params:
-            obj_set = cls.objects.filter(**params)
-            if obj_set:
-                for obj in obj_set:
-                    obj.flag_deleted = 1
-                count_update = cls.objects.bulk_update(
-                        obj_set, fields=['flag_deleted'], batch_size=get_batch_size(obj_set))
-                resp.status_code = Status.DELETED
-                resp.write(f"Delete Success on {count_update} Rows!")
-            else:
-                count_delete = obj_set.delete()
-                resp.status_code = Status.DELETED
-                resp.write(f"Delete Success on {count_delete} Rows!")
-        else:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("The requested resource does not exist!")
     elif request.method == "PUT":
         obj_set = json.loads(request.body)
         if type(obj_set) is not list:
@@ -153,7 +139,8 @@ def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
         target_set = [cls.objects.get(id=obj.get('id')) for obj in obj_set]
         all_exists = (len(target_set) == len(obj_set))
         if all_exists:
-            [target.set_fields(**obj) for target, obj in zip(target_set, obj_set)]
+            [target.set_fields(**obj)
+             for target, obj in zip(target_set, obj_set)]
             count_update = cls.objects.bulk_update(
                 target_set, fields=cls.query_editable_fields, batch_size=get_batch_size(target_set))
             resp.status_code = Status.UPDATED
@@ -187,7 +174,6 @@ def generic_unary_query(cls, request: HttpRequest,) -> HttpResponse:
     return resp
 
 
-
 def generic_paginated_fetch(cls, request: HttpRequest, **kwargs) -> HttpResponse:
     """
     generic paginated fetch on one table
@@ -197,9 +183,9 @@ def generic_paginated_fetch(cls, request: HttpRequest, **kwargs) -> HttpResponse
     resp = HttpResponse()
     pager_params = get_paginator_params(request)
 
-
     obj_set = cls.objects if not kwargs else cls.objects.filter(**kwargs)
-    obj_set = obj_set.order_by(pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
+    obj_set = obj_set.order_by(
+        pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
     pager = Paginator(obj_set, pager_params['size'])
 
     if pager_params['page'] > pager.num_pages:

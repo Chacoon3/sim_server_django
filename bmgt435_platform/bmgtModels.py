@@ -152,8 +152,6 @@ class BMGTCase(DbModelBase):
     visible = models.IntegerField(BinaryIntegerFlag.choices, default=BinaryIntegerFlag.TRUE, null=False)
     # how many times a user can submit for this case
     max_submission = models.IntegerField(default=5, null=False, unique=False)
-    # how many times a user can simulate for this case
-    max_simulation = models.IntegerField(default=-1, null=False, unique=False)
 
     def as_dictionary(self) -> dict:
         return dict(
@@ -165,7 +163,8 @@ class BMGTCase(DbModelBase):
 
 class BMGTCaseRecord(DbModelBase):
 
-    query_editable_fields = ["group_id", "case_id", "score", "detail_json", ]
+    query_editable_fields = ["group_id", "case_id", "score",]
+
 
     class BMGTCaseRecordState(models.IntegerChoices):
         RUNNING = 0
@@ -176,7 +175,10 @@ class BMGTCaseRecord(DbModelBase):
     case_id = models.ForeignKey(BMGTCase, on_delete=models.SET_NULL, null=True,)
     score = models.FloatField(null=True, default=None)
     state = models.IntegerField(BMGTCaseRecordState.choices, default=BMGTCaseRecordState.RUNNING, null=False)
-    detail_json = models.TextField(null=False, default='')
+
+    @property
+    def case_record_file_name(self) -> str:
+        return f"{self.case_id.name}_{self.group_id.name}_record_index_{self.id}.xlsx"
 
     def as_dictionary(self) -> dict:
         return dict(
@@ -186,9 +188,8 @@ class BMGTCaseRecord(DbModelBase):
             group_name = self.group_id.name,
             case_id=self.case_id.id,
             case_name = self.case_id.name,
-            state = self.BMGTCaseRecordState.choices[self.state],
+            state = self.BMGTCaseRecordState.choices[self.state][1],
             score=self.score,
-            detail_json=self.detail_json,
         )
 
 
