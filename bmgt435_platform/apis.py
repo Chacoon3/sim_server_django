@@ -3,7 +3,7 @@ from django.views.decorators.http import require_POST, require_GET,  require_htt
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import IntegrityError
 
-from .apps import app_fs as app_file_system
+from .apps import bmgt435_file_sys as app_file_system
 from .simulation.Cases import FoodCenter
 from .bmgtModels import *
 from .utils.statusCode import Status
@@ -390,12 +390,18 @@ class CaseApi:
                                 caseInst = FoodCenter(**params)
                                 res = caseInst.run()
                                 record_bytes = res.as_bytes()
+                                record_dict = res.as_dictionary()
                                 case_record = BMGTCaseRecord(
-                                    case_id=case, group_id=group, score=res.score, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS)
+                                    user_id=user,
+                                    case_id=case, group_id=group, score=res.score, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS,
+                                    summary_json = record_dict,)
                                 case_record.save()
                                 app_file_system.save(
                                     case_record.case_record_file_name, record_bytes)
-                                resp.write(res.as_json())
+                                resp.write(json.dumps({
+                                    "case_record_id": case_record.id,
+                                    "summary": record_dict,
+                                }))
                                 resp.status_code = Status.OK
                             else:
                                 resp.write("Invalid data format!")

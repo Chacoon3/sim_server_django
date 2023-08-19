@@ -5,7 +5,7 @@ from .bmgtModels import *
 
 class BMGTUserAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("None", {"fields": ["did", "first_name", "last_name", "role", "group_id"]}),
+        ("None", {"fields": ["did", "first_name", "last_name", "role",]}),
     ]
     
     list_display = ["id", "did", "first_name", "last_name", "create_time", "role", "group_id", "activated",]

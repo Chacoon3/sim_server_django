@@ -236,6 +236,10 @@ class FoodCenterResult(SimulationResult):
         return bytes_io
     
 
+    def as_dictionary(self):
+        return self.aggregation_dataframe.loc[0,].to_dict()
+    
+
     def as_json(self):
         return self.aggregation_dataframe.loc[0,].to_json()
 

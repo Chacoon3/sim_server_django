@@ -12,7 +12,6 @@ from django.utils import timezone
 APP_LABEL = "bmgt435_platform"
 
 
-
 class BinaryIntegerFlag(models.IntegerChoices):
     FALSE = 0
     TRUE = 1
@@ -23,13 +22,11 @@ class DbModelBase(models.Model):
         abstract = True
         app_label = APP_LABEL
 
-
     query_editable_fields = []
 
-
     id = models.AutoField(auto_created=True, primary_key=True, null=False)
-    create_time = models.DateTimeField(auto_created=True, default=timezone.now, null=False)
-        
+    create_time = models.DateTimeField(
+        auto_created=True, default=timezone.now, null=False)
 
     def as_dictionary(self) -> dict:
         """
@@ -44,14 +41,12 @@ class DbModelBase(models.Model):
         # return self.create_time.astimezone().isoformat()
         return timezone.make_naive(self.create_time).isoformat(sep=' ', timespec='seconds')
 
-
-    def set_fields(self, save = False, **kwargs):
+    def set_fields(self, save=False, **kwargs):
         for field in kwargs.keys():
             if field in self.query_editable_fields:
                 setattr(self, field, kwargs[field])
         if save:
             self.save()
-
 
     def validate(self):
         raise NotImplementedError()
@@ -59,8 +54,8 @@ class DbModelBase(models.Model):
 
 class BMGTTag(DbModelBase):
 
-    query_editable_fields = ['name',]
-    name=models.CharField(max_length=10, null=False, unique=True, default='')
+    query_editable_fields = ['name', ]
+    name = models.CharField(max_length=10, null=False, unique=True, default='')
 
     def as_dictionary(self) -> dict:
         return {
@@ -93,16 +88,21 @@ class BMGTUser(DbModelBase):
         ADMIN = 'admin'
         USER = 'user'
 
+    query_editable_fields = ["first_name",
+                             "last_name", "role", "group_id", "activated", ]
 
-    query_editable_fields = ["first_name", "last_name", "role", "group_id", "activated", ]
-
-    did = models.CharField(max_length=60, auto_created=False, null=False, unique=True,)
-    first_name = models.CharField(max_length = 60, null=False)
-    last_name = models.CharField(max_length = 60, null=False)
-    password = models.CharField(max_length = 100,  null=False, default="")  # stores the password hash
-    activated = models.IntegerField(choices=BinaryIntegerFlag.choices, default=BinaryIntegerFlag.FALSE, null=False,)
-    role = models.CharField(choices=BMGTUserRole.choices, default=BMGTUserRole.USER, null=False, max_length=5)
-    group_id = models.ForeignKey(BMGTGroup, on_delete=models.SET_NULL, null=True)
+    did = models.CharField(
+        max_length=60, auto_created=False, null=False, unique=True,)
+    first_name = models.CharField(max_length=60, null=False)
+    last_name = models.CharField(max_length=60, null=False)
+    # stores the password hash
+    password = models.CharField(max_length=100,  null=False, default="")
+    activated = models.IntegerField(
+        choices=BinaryIntegerFlag.choices, default=BinaryIntegerFlag.FALSE, null=False,)
+    role = models.CharField(choices=BMGTUserRole.choices,
+                            default=BMGTUserRole.USER, null=False, max_length=5)
+    group_id = models.ForeignKey(
+        BMGTGroup, on_delete=models.SET_NULL, null=True)
 
     def name(self):
         if self.first_name and self.last_name:
@@ -118,13 +118,13 @@ class BMGTUser(DbModelBase):
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.formatted_create_time,
+            create_time=self.formatted_create_time,
             did=self.did,
             first_name=self.first_name,
             last_name=self.last_name,
-            role = self.role,
+            role=self.role,
             group_id=self.group_id.id if self.group_id else None,
-            group_name = self.group_id.name if self.group_id else None,
+            group_name=self.group_id.name if self.group_id else None,
         )
 
 
@@ -138,7 +138,7 @@ class BMGTTagged(DbModelBase):
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.formatted_create_time,
+            create_time=self.formatted_create_time,
             tag_id=self.tag_id.id,
             user_id=self.user_id.id,
         )
@@ -149,32 +149,38 @@ class BMGTCase(DbModelBase):
     query_editable_fields = ["name", "description", ]
 
     name = models.CharField(max_length=50, null=False, default='')
-    visible = models.IntegerField(BinaryIntegerFlag.choices, default=BinaryIntegerFlag.TRUE, null=False)
+    visible = models.IntegerField(
+        BinaryIntegerFlag.choices, default=BinaryIntegerFlag.TRUE, null=False)
     # how many times a user can submit for this case
     max_submission = models.IntegerField(default=5, null=False, unique=False)
 
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.formatted_create_time,
+            create_time=self.formatted_create_time,
             name=self.name,
         )
 
 
 class BMGTCaseRecord(DbModelBase):
 
-    query_editable_fields = ["group_id", "case_id", "score",]
-
+    query_editable_fields = ["group_id", "case_id", "score", ]
 
     class BMGTCaseRecordState(models.IntegerChoices):
         RUNNING = 0
         SUCCESS = 1
         FAILED = 2
 
-    group_id = models.ForeignKey(BMGTGroup, on_delete=models.SET_NULL, null=True,)
-    case_id = models.ForeignKey(BMGTCase, on_delete=models.SET_NULL, null=True,)
+    group_id = models.ForeignKey(
+        BMGTGroup, on_delete=models.SET_NULL, null=True,)
+    user_id = models.ForeignKey(
+        BMGTUser, on_delete=models.SET_NULL, null=True,)
+    case_id = models.ForeignKey(
+        BMGTCase, on_delete=models.SET_NULL, null=True,)
     score = models.FloatField(null=True, default=None)
-    state = models.IntegerField(BMGTCaseRecordState.choices, default=BMGTCaseRecordState.RUNNING, null=False)
+    state = models.IntegerField(
+        BMGTCaseRecordState.choices, default=BMGTCaseRecordState.RUNNING, null=False)
+    summary_json = models.TextField(null=False)
 
     @property
     def case_record_file_name(self) -> str:
@@ -183,12 +189,14 @@ class BMGTCaseRecord(DbModelBase):
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.formatted_create_time,
+            create_time=self.formatted_create_time,
             group_id=self.group_id.id,
-            group_name = self.group_id.name,
+            user_id=self.user_id.id,
+            user_name=self.user_id.name,
+            group_name=self.group_id.name,
             case_id=self.case_id.id,
-            case_name = self.case_id.name,
-            state = self.BMGTCaseRecordState.choices[self.state][1],
+            case_name=self.case_id.name,
+            state=self.BMGTCaseRecordState.choices[self.state][1],
             score=self.score,
         )
 
@@ -197,14 +205,15 @@ class CaseConfig(DbModelBase):
 
     query_editable_fields = ["case_id", "config_json", ]
 
-    case_id = models.ForeignKey(BMGTCase, on_delete=models.CASCADE, null=False,)
+    case_id = models.ForeignKey(
+        BMGTCase, on_delete=models.CASCADE, null=False,)
     config_json = models.TextField(null=False, default='')
 
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
-            create_time = self.formatted_create_time,
+            create_time=self.formatted_create_time,
             case_id=self.case_id.id,
-            case_name = self.case_id.name,
+            case_name=self.case_id.name,
             config_json=self.config_json,
         )

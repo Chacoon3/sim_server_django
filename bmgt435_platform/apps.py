@@ -9,4 +9,4 @@ class BmgtPlatformConfig(AppConfig):
     
     
     
-app_fs = FileSystemStorage()
+bmgt435_file_sys = FileSystemStorage()
