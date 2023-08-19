@@ -3,19 +3,19 @@ from django.views.decorators.http import require_POST, require_GET,  require_htt
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import IntegrityError
 
-from .apps import bmgt435_file_sys as app_file_system
+from .apps import bmgt435_file_sys
 from .simulation.Cases import FoodCenter
 from .bmgtModels import *
 from .utils.statusCode import Status
 from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulation_result
-from .utils.apiUtils import request_error_handler, password_valid, generic_unary_query, generic_paginated_fetch
+from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params
 
 import pandas as pd
 import json
 import io
 
 
-CASE_RECORD_PATH = app_file_system.base_location.__str__() + "/case_records/"
+CASE_RECORD_PATH = bmgt435_file_sys.base_location.__str__() + "case_records/"
 
 
 class AuthApi:
@@ -126,17 +126,17 @@ class UserApi:
 
         return resp
 
-    @request_error_handler
-    @staticmethod
-    def users(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        match request.method:
-            case 'GET':
-                params = request.GET.dict()
-                users = BMGTUser.objects.filter(
-                    **params, activated=1, )
-                resp.write(serialize_models(users))
-                resp.status_code = Status.OK
+    # @request_error_handler
+    # @staticmethod
+    # def users(request: HttpRequest) -> HttpResponse:
+    #     resp = HttpResponse()
+    #     match request.method:
+    #         case 'GET':
+    #             params = request.GET.dict()
+    #             users = BMGTUser.objects.filter(
+    #                 **params, activated=1, )
+    #             resp.write(serialize_models(users))
+    #             resp.status_code = Status.OK
 
             # case 'DELETE':
             #     params = request.GET.dict()
@@ -154,11 +154,11 @@ class UserApi:
             #             resp.write("User not found!")
             #             resp.status_code = Status.NOT_FOUND
 
-            case _:
-                resp.write("Method not allowed!")
-                resp.status_code = Status.METHOD_NOT_ALLOWED
+        #     case _:
+        #         resp.write("Method not allowed!")
+        #         resp.status_code = Status.METHOD_NOT_ALLOWED
 
-        return resp
+        # return resp
 
 
 class GroupApi:
@@ -185,7 +185,8 @@ class GroupApi:
     @require_GET
     @staticmethod
     def groups_paginated(request: HttpRequest,) -> HttpResponse:
-        return generic_paginated_fetch(BMGTGroup, request)
+        pager_params = pager_params_from_request(request)
+        return generic_paginated_query(BMGTGroup, pager_params)
 
     @request_error_handler
     @require_POST
@@ -301,7 +302,7 @@ class CaseApi:
     @require_GET
     @staticmethod
     def cases_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_fetch(BMGTCase, request)
+        return generic_paginated_query(BMGTCase, pager_params_from_request(request))
 
     # @request_error_handler
     # @require_POST
@@ -334,23 +335,23 @@ class CaseApi:
 
     #     return resp
 
-    @staticmethod
-    def onCaseCompleted(case_record_id: int,  simRes):
-        try:
-            case_record = BMGTCaseRecord.objects.get(id=case_record_id)
-            if simRes:
-                case_detail = serialize_simulation_result(simRes)
-                case_record.detail_json = case_detail
-                case_record.score = simRes.score
-                case_record.state = BMGTCaseRecord.BMGTCaseRecordState.SUCCESS
-            else:
-                case_record.state = BMGTCaseRecord.BMGTCaseRecordState.FAILED
-            case_record.save()
+    # @staticmethod
+    # def onCaseCompleted(case_record_id: int,  simRes):
+    #     try:
+    #         case_record = BMGTCaseRecord.objects.get(id=case_record_id)
+    #         if simRes:
+    #             case_detail = serialize_simulation_result(simRes)
+    #             case_record.detail_json = case_detail
+    #             case_record.score = simRes.score
+    #             case_record.state = BMGTCaseRecord.BMGTCaseRecordState.SUCCESS
+    #         else:
+    #             case_record.state = BMGTCaseRecord.BMGTCaseRecordState.FAILED
+    #         case_record.save()
 
-        except Exception:
-            case_record.state = BMGTCaseRecord.BMGTCaseRecordState.FAILED
-            case_record.save()
-            raise
+    #     except Exception:
+    #         case_record.state = BMGTCaseRecord.BMGTCaseRecordState.FAILED
+    #         case_record.save()
+    #         raise
 
     @request_error_handler
     @require_POST
@@ -396,8 +397,8 @@ class CaseApi:
                                     case_id=case, group_id=group, score=res.score, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS,
                                     summary_json = record_dict,)
                                 case_record.save()
-                                app_file_system.save(
-                                    case_record.case_record_file_name, record_bytes)
+                                bmgt435_file_sys.save(
+                                   CASE_RECORD_PATH + case_record.case_record_file_name, record_bytes)
                                 resp.write(json.dumps({
                                     "case_record_id": case_record.id,
                                     "summary": record_dict,
@@ -429,8 +430,8 @@ class CaseRecordApi:
     @staticmethod
     def get_case_record(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
-        case_record_id = request.GET.get('case_record_id', None)
-        case_record_query = case_record_id and BMGTCaseRecord.objects.filter(
+        case_record_id = request.GET.get('id', None)
+        case_record_query = BMGTCaseRecord.objects.filter(
             id=case_record_id, )
         if case_record_query.exists():
             case_record = case_record_query.get()
@@ -447,31 +448,63 @@ class CaseRecordApi:
     @staticmethod
     def get_case_record_file(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
-        case_record_id = request.GET.get('case_record_id', None)
+        case_record_id = request.GET.get('id', None)
         case_record_query = BMGTCaseRecord.objects.filter(
             id=case_record_id, )
         if case_record_query.exists():
-            pass
+            file_name = case_record_query.get().case_record_file_name
+            full_name = CASE_RECORD_PATH + file_name
+            with bmgt435_file_sys.open(full_name, 'rb') as file:
+                resp.write(file.read())
+            resp.status_code = Status.OK
+            resp['Content-Type'] = "octet/stream"
+        else:
+            resp.write("Case record not found!")
+            resp.status_code = Status.NOT_FOUND
+
+        return resp
+
 
     @request_error_handler
     @require_GET
     @staticmethod
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_fetch(BMGTCaseRecord, request, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS)
+        return generic_paginated_query(BMGTCaseRecord, pager_params_from_request(request), state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS)
+    
+    @request_error_handler
+    @require_GET
+    def leader_board_paginated(request: HttpRequest) -> HttpResponse:
+        resp = HttpResponse()
+        case_id = int(request.GET.get('case_id', None))
+        match case_id:
+            case 1:
+                page = int(request.GET.get('page', None))
+                size = int(request.GET.get('size', None))
+                pager_params = create_pager_params(page, size, 0, 'score')
+                return generic_paginated_query(
+                    BMGTCaseRecord, pager_params, 
+                    state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS, 
+                    case_id=case_id)
+
+            case _:
+                resp.write("Case not found!")
+                resp.status_code = Status.NOT_FOUND
+
+        return resp
 
 
 class TagApi:
 
-    @request_error_handler
-    @staticmethod
-    def tags(request: HttpRequest) -> HttpResponse:
-        return generic_unary_query(BMGTTag, request)
+    # @request_error_handler
+    # @staticmethod
+    # def tags(request: HttpRequest) -> HttpResponse:
+    #     return generic_table_query(BMGTTag, request)
 
     @request_error_handler
     @require_GET
     @staticmethod
     def tags_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_fetch(BMGTTag, request)
+        return generic_paginated_query(BMGTTag, pager_params_from_request(request))
 
 
 class ManageApi:
@@ -510,19 +543,19 @@ class ManageApi:
 
         return resp
 
-    @request_error_handler
-    @staticmethod
-    @require_POST
-    def clean_groups(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        count_deleted = 0
-        for group in BMGTGroup.objects.iterator():
-            if group.users.exists() == False:
-                group.delete()
-                count_deleted += 1
-        resp.status_code = Status.DELETED
-        resp.write(f"{count_deleted} dirty groups deleted!")
-        return resp
+    # @request_error_handler
+    # @staticmethod
+    # @require_POST
+    # def clean_groups(request: HttpRequest) -> HttpResponse:
+    #     resp = HttpResponse()
+    #     count_deleted = 0
+    #     for group in BMGTGroup.objects.iterator():
+    #         if group.users.exists() == False:
+    #             group.delete()
+    #             count_deleted += 1
+    #     resp.status_code = Status.DELETED
+    #     resp.write(f"{count_deleted} dirty groups deleted!")
+    #     return resp
 
     @request_error_handler
     @require_POST
@@ -540,4 +573,4 @@ class ManageApi:
     @require_GET
     @staticmethod
     def view_users(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_fetch(BMGTUser, request)
+        return generic_paginated_query(BMGTUser, pager_params_from_request(request))

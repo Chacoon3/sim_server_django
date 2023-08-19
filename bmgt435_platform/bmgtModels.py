@@ -104,6 +104,7 @@ class BMGTUser(DbModelBase):
     group_id = models.ForeignKey(
         BMGTGroup, on_delete=models.SET_NULL, null=True)
 
+    @property
     def name(self):
         if self.first_name and self.last_name:
             name = self.first_name + " " + self.last_name
@@ -184,6 +185,9 @@ class BMGTCaseRecord(DbModelBase):
 
     @property
     def case_record_file_name(self) -> str:
+        """
+        name of the detailed case record which is stored on the server, does not contain directory info
+        """
         return f"{self.case_id.name}_{self.group_id.name}_record_index_{self.id}.xlsx"
 
     def as_dictionary(self) -> dict:

@@ -29,12 +29,14 @@ urlpatterns = [
     path('api/case-records/file/get', CaseRecordApi.get_case_record_file, ),
     path('api/case-records/paginated', CaseRecordApi.case_records_paginated,),
 
+    path("api/leader-board/paginated", CaseRecordApi.leader_board_paginated ),
 
-    path("api/tags", TagApi.tags, name="tags"),
-    path("api/tags/paginated", TagApi.tags_paginated,),
+
+    # path("api/tags", TagApi.tags, name="tags"),
+    # path("api/tags/paginated", TagApi.tags_paginated,),
 
 
     path('api/manage/import-users', ManageApi.import_users,),
     path('api/manage/view-users', ManageApi.view_users,),
-    path('api/manage/clean/groups', ManageApi.clean_groups,),
+    # path('api/manage/clean/groups', ManageApi.clean_groups,),
 ]
