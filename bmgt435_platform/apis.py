@@ -289,7 +289,7 @@ class CaseApi:
         resp = HttpResponse()
         case_id = request.GET.get('case_id', None)
         case_query = case_id and BMGTCase.objects.filter(
-            id=case_id, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS)
+            id=case_id, state=BMGTCaseRecord.State.SUCCESS)
         if case_query.exists():
             case = case_query.get()
             resp.write(serialize_model_instance(case))
@@ -370,38 +370,30 @@ class CaseApi:
                 count_submission = BMGTCaseRecord.objects.filter(
                     case_id=case_id, group_id=user.group_id,
                     state__in=[
-                        BMGTCaseRecord.BMGTCaseRecordState.RUNNING, BMGTCaseRecord.BMGTCaseRecordState.SUCCESS]
+                        BMGTCaseRecord.State.RUNNING, BMGTCaseRecord.State.SUCCESS]
                 ).count()
                 if case.max_submission == -1 or count_submission < case.max_submission:
+                    case_record = BMGTCaseRecord(
+                        user_id=user,
+                        case_id=case, group_id=group, state=BMGTCaseRecord.State.RUNNING)
+                    case_record.save()
                     # run logic
                     match case_id:
                         case 1:
                             params = data.get('case_params')
                             if params:
-                                # original logic using multiprocessing
-
-                                # caseInst = FoodCenter(**params)
-                                # case_record = BMGTCaseRecord(case_id = case, group_id = group,)
-                                # case_record.save()
-                                # appConfig.app_process_pool.apply_async(func = caseInst.run, callback=lambda res: CaseApi.onCaseCompleted(case_record.id, res))
-                                # resp.write(serialize_model_instance(case_record))
-                                # resp.status_code = Status.OK
-                                #
-                                #  blocking logic
                                 caseInst = FoodCenter(**params)
                                 res = caseInst.run()
-                                record_bytes = res.as_bytes()
-                                record_dict = res.as_dictionary()
-                                case_record = BMGTCaseRecord(
-                                    user_id=user,
-                                    case_id=case, group_id=group, score=res.score, state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS,
-                                    summary_json = record_dict,)
+                                case_detail_bytes = res.detail_as_bytes()
+                                case_summary = res.summary_as_dict()
+                                case_record.summary_dict = case_summary
+                                detail_file_name = CASE_RECORD_PATH + case_record.case_record_file_name
+                                bmgt435_file_sys.save(detail_file_name, case_detail_bytes)
+                                case_record.state = BMGTCaseRecord.State.SUCCESS
                                 case_record.save()
-                                bmgt435_file_sys.save(
-                                   CASE_RECORD_PATH + case_record.case_record_file_name, record_bytes)
                                 resp.write(json.dumps({
                                     "case_record_id": case_record.id,
-                                    "summary": record_dict,
+                                    "summary": case_record.summary_dict,
                                 }))
                                 resp.status_code = Status.OK
                             else:
@@ -454,10 +446,14 @@ class CaseRecordApi:
         if case_record_query.exists():
             file_name = case_record_query.get().case_record_file_name
             full_name = CASE_RECORD_PATH + file_name
-            with bmgt435_file_sys.open(full_name, 'rb') as file:
-                resp.write(file.read())
-            resp.status_code = Status.OK
-            resp['Content-Type'] = "octet/stream"
+            if not bmgt435_file_sys.exists(full_name):
+                resp.write("Case record not found!")
+                resp.status_code = Status.NOT_FOUND
+            else:
+                with bmgt435_file_sys.open(full_name, 'rb') as file:
+                    resp.write(file.read())
+                resp.status_code = Status.OK
+                resp['Content-Type'] = "octet/stream"
         else:
             resp.write("Case record not found!")
             resp.status_code = Status.NOT_FOUND
@@ -469,7 +465,7 @@ class CaseRecordApi:
     @require_GET
     @staticmethod
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_query(BMGTCaseRecord, pager_params_from_request(request), state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS)
+        return generic_paginated_query(BMGTCaseRecord, pager_params_from_request(request), state=BMGTCaseRecord.State.SUCCESS)
     
     @request_error_handler
     @require_GET
@@ -483,7 +479,7 @@ class CaseRecordApi:
                 pager_params = create_pager_params(page, size, 0, 'score')
                 return generic_paginated_query(
                     BMGTCaseRecord, pager_params, 
-                    state=BMGTCaseRecord.BMGTCaseRecordState.SUCCESS, 
+                    state=BMGTCaseRecord.State.SUCCESS, 
                     case_id=case_id)
 
             case _:
@@ -516,10 +512,10 @@ class ManageApi:
         resp = HttpResponse()
         if request.body:
             with io.BytesIO(request.body) as file:
-                user_csv = pd.read_csv(file, encoding='utf-8')
-                format_valid = len(user_csv.columns) == 3 and all(user_csv.columns == [
-                    'user_first_name', 'user_last_name', 'directory_id'])
+                raw_csv = pd.read_csv(file, encoding='utf-8')
+                format_valid = all([col_name in raw_csv.columns for col_name in ['user_first_name', 'user_last_name', 'directory_id']])
                 if format_valid:
+                    user_csv = raw_csv[['user_first_name', 'user_last_name', 'directory_id']]
                     user_csv.columns = ['first_name', 'last_name', 'did']
                     user_csv.applymap(lambda x: x.strip())
                     obj_set = [BMGTUser(**row)

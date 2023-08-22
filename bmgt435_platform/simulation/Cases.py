@@ -138,16 +138,16 @@ class SimulationResult(object):
     def iteration_dataframe(self):
         return self.__iteration_dataframe
     
-    def as_bytes(self) -> BytesIO:
+    def detail_as_bytes(self) -> BytesIO:
         """
         returns the simulation result as an IO bytes for server-side persistence
         """
 
         raise NotImplementedError()
 
-    def as_json(self) -> str:
+    def summary_as_dict(self) -> str:
         """
-        returns the simulation result as a json string for client-side rendering
+        returns the simulation result as a json string
         """
         raise NotImplementedError()
 
@@ -218,7 +218,7 @@ class CaseDES(CaseBase):
 
 class FoodCenterResult(SimulationResult):
 
-    def as_bytes(self):
+    def detail_as_bytes(self):
         wb = openpyxl.Workbook(write_only=True)
         main_sheet = wb.create_sheet('main')
         main_sheet.append(self.aggregation_dataframe.columns.tolist())
@@ -236,12 +236,8 @@ class FoodCenterResult(SimulationResult):
         return bytes_io
     
 
-    def as_dictionary(self):
+    def summary_as_dict(self):
         return self.aggregation_dataframe.loc[0,].to_dict()
-    
-
-    def as_json(self):
-        return self.aggregation_dataframe.loc[0,].to_json()
 
 
 class FoodCenter(CaseBase):

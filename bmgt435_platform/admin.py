@@ -24,7 +24,7 @@ class CaseRecordAdmin(admin.ModelAdmin):
         ("None", {"fields": ["group_id", "case_id", "state", "score",]}),
     ]
 
-    list_display = ["id", "group_id", "case_id", "state", "score"]
+    list_display = ["id", "group_id", "case_id", "state", "score", "summary_dict"]
 
 
 class GroupAdmin(admin.ModelAdmin):

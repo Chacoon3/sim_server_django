@@ -167,7 +167,7 @@ class BMGTCaseRecord(DbModelBase):
 
     query_editable_fields = ["group_id", "case_id", "score", ]
 
-    class BMGTCaseRecordState(models.IntegerChoices):
+    class State(models.IntegerChoices):
         RUNNING = 0
         SUCCESS = 1
         FAILED = 2
@@ -180,8 +180,8 @@ class BMGTCaseRecord(DbModelBase):
         BMGTCase, on_delete=models.SET_NULL, null=True,)
     score = models.FloatField(null=True, default=None)
     state = models.IntegerField(
-        BMGTCaseRecordState.choices, default=BMGTCaseRecordState.RUNNING, null=False)
-    summary_json = models.TextField(null=False)
+        State.choices, default=State.RUNNING, null=False)
+    summary_dict = models.TextField(null=False, default="")
 
     @property
     def case_record_file_name(self) -> str:
@@ -200,7 +200,7 @@ class BMGTCaseRecord(DbModelBase):
             group_name=self.group_id.name,
             case_id=self.case_id.id,
             case_name=self.case_id.name,
-            state=self.BMGTCaseRecordState.choices[self.state][1],
+            state=self.State.choices[self.state][1],
             score=self.score,
         )
 
@@ -220,4 +220,21 @@ class CaseConfig(DbModelBase):
             case_id=self.case_id.id,
             case_name=self.case_id.name,
             config_json=self.config_json,
+        )
+
+
+class BMGTFeedback(DbModelBase):
+
+
+    id = models.AutoField(auto_created=True, primary_key=True, null=False)
+    user_id = models.ForeignKey(BMGTUser, on_delete=models.SET_NULL, null=True,)
+    content = models.TextField(null=False, default='')
+
+    def as_dictionary(self) -> dict:
+        return dict(
+            id=self.id,
+            create_time=self.formatted_create_time,
+            user_id=self.user_id.id,
+            user_name=self.user_id.name,
+            content=self.content,
         )
