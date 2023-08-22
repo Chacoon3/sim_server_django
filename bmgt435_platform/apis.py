@@ -390,6 +390,7 @@ class CaseApi:
                                 detail_file_name = CASE_RECORD_PATH + case_record.case_record_file_name
                                 bmgt435_file_sys.save(detail_file_name, case_detail_bytes)
                                 case_record.state = BMGTCaseRecord.State.SUCCESS
+                                case_record.score = res.score
                                 case_record.save()
                                 resp.write(json.dumps({
                                     "case_record_id": case_record.id,

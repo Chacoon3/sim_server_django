@@ -8,28 +8,26 @@ def CORSMiddleware(get_response):
     """
     this enables the CORS policy so that frontend can access the backend
     """
+
+    def config_cors_response(resp: HttpResponse):
+            # resp["Access-Control-Allow-Origin"] = "http://127.0.0.1"
+            resp["Access-Control-Allow-Origin"] = "http://localhost:5173"
+            resp["Access-Control-Allow-Credentials"] = "true"
+            resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+            resp['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            resp['Access-Control-Expose-Headers'] = 'cookie, set-cookie'
+            resp['UseHttpOnly'] = '1'
     
     def middleware(request: HttpRequest):
 
         if request.method == 'OPTIONS':
             resp = HttpResponse()
-            resp["Access-Control-Allow-Origin"] = "http://localhost:5173"
-            resp["Access-Control-Allow-Credentials"] = "true"
-            resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
-            resp['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            resp['Access-Control-Expose-Headers'] = 'cookie, set-cookie'
-            resp['UseHttpOnly'] = '1'
+            config_cors_response(resp)
             resp.status_code = Status.OK
             return resp
         else:
             resp = get_response(request)
-            resp["Access-Control-Allow-Origin"] = "http://localhost:5173"
-            resp["Access-Control-Allow-Credentials"] = "true"
-            resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
-            resp['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            resp['Access-Control-Expose-Headers'] = 'cookie, set-cookie'
-            resp['UseHttpOnly'] = '1'
-            
+            config_cors_response(resp)
             return resp
     
     return middleware
