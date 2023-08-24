@@ -79,10 +79,11 @@ def request_error_handler(func):
             resp.status_code = Status.INTERNAL_SERVER_ERROR
 
         except Exception as e:
-            # resp = HttpResponse()
-            # resp.write(e.args[0])
-            # resp.status_code = Status.INTERNAL_SERVER_ERROR
-            raise
+            resp = HttpResponse()
+            resp.write(e.args[0])
+            resp.status_code = Status.INTERNAL_SERVER_ERROR
+
+            # raise
         
         return resp
 
