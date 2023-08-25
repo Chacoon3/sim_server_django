@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -92,11 +93,15 @@ ASGI_APPLICATION = 'sim_server_django.asgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': '',
-        "HOST":'127.0.0.1',
+        'NAME': os.environ.get("BMGT435_MYSQL_DB"),
+        "HOST":os.environ.get("BMGT435_MYSQL_HOST"),
         "PORT":3306,
-        "USER":"root",
-        "PASSWORD":"root",
+        "USER":os.environ.get("BMGT435_MYSQL_USER"),
+        "PASSWORD":os.environ.get("BMGT435_MYSQL_PASSWORD"),
+        'MYSQL': {
+            'driver': 'pymysql',
+            'charset': 'utf8mb4',
+        },
     }
 }
 

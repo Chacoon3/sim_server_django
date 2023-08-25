@@ -42,8 +42,8 @@ class AuthApi:
         password = data['password']
 
         user = BMGTUser.objects.filter(did=did, activated=True, )
-        if user:
-            user = user[0]
+        if user.exists():
+            user = user.get()
             if user and user.password and check_password(password, user.password):
                 resp.status_code = Status.OK
                 AuthApi.__set_auth_cookie(resp, user)
