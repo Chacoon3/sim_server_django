@@ -8,7 +8,7 @@ services:
       BMGT435_MYSQL_HOST: mysql
       BMGT435_MYSQL_USER: root
       BMGT435_MYSQL_PASSWORD: root
-      BMGT435_MYSQL_DB: bmgt435-mysql
+      BMGT435_MYSQL_DB: bmgt435-mysql # name of the database
     depends_on:
       - mysql
   
