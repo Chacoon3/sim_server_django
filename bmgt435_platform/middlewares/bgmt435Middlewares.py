@@ -2,6 +2,7 @@ from ..utils.statusCode import Status
 from django.http import HttpRequest, HttpResponse
 import time 
 import random
+import os
 
 
 def CORSMiddleware(get_response):
@@ -10,8 +11,7 @@ def CORSMiddleware(get_response):
     """
 
     def config_cors_response(resp: HttpResponse):
-            # resp["Access-Control-Allow-Origin"] = "http://127.0.0.1"
-            resp["Access-Control-Allow-Origin"] = "http://localhost:5173"
+            resp["Access-Control-Allow-Origin"] = os.environ.get("BMGT435_VUE_HOST", "http://localhost:5173")
             resp["Access-Control-Allow-Credentials"] = "true"
             resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
             resp['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
@@ -45,7 +45,7 @@ def AuthenticationMiddleware(get_response):
         requests without valid cookies will be rejected
         """
         
-        if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin/"):
+        if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin"):
             return get_response(request)
         elif request.path.startswith("/bmgt435/api/manage/"):
             request_valid = bool(request.COOKIES.get('id', None) and request.COOKIES.get('role', None) == ADMIN_ROLE)

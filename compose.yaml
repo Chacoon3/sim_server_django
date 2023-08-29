@@ -5,6 +5,7 @@ services:
     ports:
       - 8000:8000
     environment:
+      BMGT435_VUE_HOST: 'http://localhost:5173'
       BMGT435_MYSQL_HOST: mysql
       BMGT435_MYSQL_USER: root
       BMGT435_MYSQL_PASSWORD: root
