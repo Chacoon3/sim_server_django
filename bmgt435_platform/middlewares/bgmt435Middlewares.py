@@ -4,14 +4,13 @@ import time
 import random
 import os
 
-
 def CORSMiddleware(get_response):
     """
     this enables the CORS policy so that frontend can access the backend
     """
-
+    origin = os.environ.get("BMGT435_INDEX")
     def config_cors_response(resp: HttpResponse):
-            resp["Access-Control-Allow-Origin"] = os.environ.get("BMGT435_VUE_HOST", "http://localhost:5173")
+            resp["Access-Control-Allow-Origin"] = origin
             resp["Access-Control-Allow-Credentials"] = "true"
             resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
             resp['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'

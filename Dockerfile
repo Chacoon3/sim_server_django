@@ -2,7 +2,6 @@
 
 ARG PYTHON_VERSION=3.10.4
 FROM python:3.10-slim-bookworm as base
-
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
@@ -23,7 +22,6 @@ RUN adduser \
 
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
-    --mount=type=bind,source=sim_server_django/settings.py,target=sim_server_django/settings.py \
     python -m pip install -r requirements.txt
 
 # Switch to the non-privileged user to run the application.
