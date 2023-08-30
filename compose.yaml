@@ -24,11 +24,5 @@ services:
     volumes:
       - bmgt435-mysql:/var/lib/mysql
 
-  frontend:
-    image: chaconn3/bmgt435_vue
-    restart: always
-    ports:
-      - 80:80
-
 volumes:
   bmgt435-mysql:
