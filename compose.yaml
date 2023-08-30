@@ -5,7 +5,7 @@ services:
     ports:
       - 8000:8000
     environment:
-      BMGT435_INDEX: http://localhost # for CORS config
+      BMGT435_INDEX: http://localhost # set CORS origin to this URL
       BMGT435_MYSQL_HOST: mysql
       BMGT435_MYSQL_USER: root
       BMGT435_MYSQL_PASSWORD: root
@@ -23,6 +23,12 @@ services:
       MYSQL_ROOT_PASSWORD: root
     volumes:
       - bmgt435-mysql:/var/lib/mysql
+
+  index:
+    image: chaconn3/bmgt435_vue
+    restart: always
+    ports:
+      - 80:80
 
 volumes:
   bmgt435-mysql:
