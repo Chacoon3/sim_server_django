@@ -28,7 +28,7 @@ DEBUG = False
 if DEBUG:
     print('Base dir is \t', BASE_DIR)
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["*"]
 
 MEDIA_ROOT = BASE_DIR.absolute().as_posix() + '/media/'
 if  DEBUG:
