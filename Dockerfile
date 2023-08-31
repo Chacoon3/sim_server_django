@@ -33,4 +33,4 @@ COPY . .
 # Expose the port that the application listens on.
 EXPOSE 8000
 # Run the application with daphne asgi server
-CMD python manage.py makemigrations && python manage.py migrate && daphne -b 0.0.0.0 -p 8000 sim_server_django.asgi:application
+CMD python manage.py makemigrations && python manage.py migrate && gunicorn -b 0.0.0.0:8000 sim_server_django.wsgi:application

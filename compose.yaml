@@ -1,6 +1,7 @@
 services:
+
   app:
-    image: chaconn3/bmgt435_service
+    build: .
     restart: always
     ports:
       - 8000:8000
@@ -24,11 +25,17 @@ services:
     volumes:
       - bmgt435-mysql:/var/lib/mysql
 
-  index:
-    image: chaconn3/bmgt435_vue
-    restart: always
-    ports:
-      - 80:80
+  # nginx:
+  #   image: nginx:1.25.2
+  #   restart: always
+  #   ports:
+  #     - 80:80
+  #   volumes:
+  #     - ./default.conf:/tmp/default.conf
+  #   depends_on: 
+  #     - app
+  #   environment:
+  #     BMGT435_API: app:8000
 
 volumes:
   bmgt435-mysql:
