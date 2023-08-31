@@ -1,7 +1,8 @@
 services:
 
   app:
-    image: chaconn3/bmgt435_service:latest
+    # build: .
+    image: chaconn3/bmgt435_service
     restart: always
     ports:
       - 8000:8000
@@ -26,24 +27,15 @@ services:
       - bmgt435-mysql:/var/lib/mysql
 
   index:
-    image: chaconn3/bmgt435_index:latest
+    image: chaconn3/bmgt435_index
     restart: always
     ports:
       - 80:80
     environment:
-      TEST_URL: http://app:8000
+      BMGT435_SERVICE: http://app:8000
+      # SERVICE_URL: http://localhost:8000
     depends_on:
       - app
-
-  # nginx:
-  #   image: nginx
-  #   restart: always
-  #   ports:
-  #     - 80:80
-  #   volumes:
-  #   - ./default.conf.template:/etc/nginx/templates/default.conf.template
-  #   environment:
-  #     - TEST_ENV=http://app:8000
 
 volumes:
   bmgt435-mysql:

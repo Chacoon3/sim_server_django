@@ -5,9 +5,7 @@ import random
 import os
 
 def CORSMiddleware(get_response):
-    """
-    this enables the CORS policy so that frontend can access the backend
-    """
+    
     origin = os.environ.get("BMGT435_INDEX")
     def config_cors_response(resp: HttpResponse):
             resp["Access-Control-Allow-Origin"] = origin

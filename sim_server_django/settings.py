@@ -24,12 +24,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-7+pi0)&orq-c)01-0vt$^=^jhs-m$)t3b7h-sx!i+#)lwbs^u5'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 if DEBUG:
     print('Base dir is \t', BASE_DIR)
 
 
-ALLOWED_HOSTS = ["app"] # set so because the frontend use this name to access the backend, which is a docker network alias
+ALLOWED_HOSTS = ['app', '127.0.0.1'] # set so because the frontend use this name to access the backend, which is a docker network alias
+CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1', 'http://app']
 
 MEDIA_ROOT = BASE_DIR.absolute().as_posix() + '/media/'
 if  DEBUG:
@@ -49,7 +50,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'bmgt435_platform.middlewares.bgmt435Middlewares.CORSMiddleware',
+    # 'bmgt435_platform.middlewares.bgmt435Middlewares.CORSMiddleware',
     'bmgt435_platform.middlewares.bgmt435Middlewares.AuthenticationMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
