@@ -30,7 +30,7 @@ if DEBUG:
 
 
 ALLOWED_HOSTS = ['app', '127.0.0.1'] # set so because the frontend use this name to access the backend, which is a docker network alias
-CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1', 'http://app']
+CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1', os.environ.get("BMGT435_INDEX")]
 
 MEDIA_ROOT = BASE_DIR.absolute().as_posix() + '/media/'
 if  DEBUG:
