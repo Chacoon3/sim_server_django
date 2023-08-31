@@ -28,11 +28,13 @@ DEBUG = False
 if DEBUG:
     print('Base dir is \t', BASE_DIR)
 
-ALLOWED_HOSTS = ["*"]
+
+ALLOWED_HOSTS = ["app"] # set so because the frontend use this name to access the backend, which is a docker network alias
 
 MEDIA_ROOT = BASE_DIR.absolute().as_posix() + '/media/'
 if  DEBUG:
     print('Media root is \t', MEDIA_ROOT)
+
 
 # Application definition
 
