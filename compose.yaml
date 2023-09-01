@@ -7,7 +7,7 @@ services:
     ports:
       - 8000:8000
     environment:
-      BMGT435_INDEX: http://localhost # set CORS origin to this URL
+      BMGT435_INDEX: http://localhost # set this to the domain name of the index service
       BMGT435_MYSQL_HOST: mysql
       BMGT435_MYSQL_USER: root
       BMGT435_MYSQL_PASSWORD: root
@@ -32,8 +32,8 @@ services:
     ports:
       - 80:80
     environment:
+      DOMAIN_NAME: chaconn3.me
       BMGT435_SERVICE: http://app:8000
-      # SERVICE_URL: http://localhost:8000
     depends_on:
       - app
 

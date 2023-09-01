@@ -24,9 +24,9 @@ class AuthApi:
     def __set_auth_cookie(response: HttpResponse, user: BMGTUser) -> None:
         response.set_cookie('id', str(user.id),
                             samesite='none', secure=True, httponly=True)
-        response.set_cookie('role', user.role, samesite='none',
-                            secure=True, httponly=True)  # for previlege control
-
+        response.set_cookie('role', user.role, 
+                            samesite='none',secure=True, httponly=True) 
+        
     @staticmethod
     def __clear_auth_cookie(response: HttpResponse) -> None:
         response.delete_cookie('id', samesite='none')
