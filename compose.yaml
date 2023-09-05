@@ -7,7 +7,7 @@ services:
     ports:
       - 8000:8000
     environment:
-      BMGT435_INDEX: http://localhost # set this to the domain name of the index service
+      BMGT435_INDEX: http://localhost:5173 # for local development CORS config
       BMGT435_MYSQL_HOST: mysql
       BMGT435_MYSQL_USER: root
       BMGT435_MYSQL_PASSWORD: root
@@ -26,16 +26,17 @@ services:
     volumes:
       - bmgt435-mysql:/var/lib/mysql
 
-  index:
-    image: chaconn3/bmgt435_index
-    restart: always
-    ports:
-      - 80:80
-    environment:
-      DOMAIN_NAME: chaconn3.me
-      BMGT435_SERVICE: http://app:8000
-    depends_on:
-      - app
+  # index:
+  #   image: chaconn3/bmgt435_index
+  #   restart: always
+  #   ports:
+  #     - 80:80
+  #   environment:
+  #     DOMAIN_NAME: chaconn3.me
+  #     BMGT435_SERVICE: http://app:8000
+  #   depends_on:
+  #     - app
+    
 
 volumes:
   bmgt435-mysql:

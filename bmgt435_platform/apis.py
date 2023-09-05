@@ -466,7 +466,22 @@ class CaseRecordApi:
     @require_GET
     @staticmethod
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_query(BMGTCaseRecord, pager_params_from_request(request), state=BMGTCaseRecord.State.SUCCESS)
+        user_id = request.COOKIES.get('id', None)
+        user = BMGTUser.objects.filter(id=user_id, activated=1,)
+        if not user.exists():
+            resp = HttpResponse()
+            resp.write("Credential Unauthorized!")
+            resp.status_code = Status.UNAUTHORIZED
+            return resp
+        else:
+            group = user.get().group_id
+            if not group:
+                resp = HttpResponse()
+                resp.write("")
+                resp.status_code = Status.NOT_FOUND
+                return resp
+            else:
+                return generic_paginated_query(BMGTCaseRecord, pager_params_from_request(request), state=BMGTCaseRecord.State.SUCCESS, group_id=group)
     
     @request_error_handler
     @require_GET

@@ -79,11 +79,11 @@ def request_error_handler(func):
             resp.status_code = Status.INTERNAL_SERVER_ERROR
 
         except Exception as e:
-            resp = HttpResponse()
-            resp.write(e.args[0])
-            resp.status_code = Status.INTERNAL_SERVER_ERROR
+            # resp = HttpResponse()
+            # resp.write(e.args[0])
+            # resp.status_code = Status.INTERNAL_SERVER_ERROR
 
-            # raise
+            raise
         
         return resp
 
@@ -113,6 +113,7 @@ def create_pager_params(page: int, size: int, asc: int, order: str) -> dict:
     params['order'] = order
     return params
 
+
 def pager_params_from_request(request: HttpRequest) -> dict:
     """
     convert get parameters to pagination parameters for paginated query
@@ -130,66 +131,6 @@ def pager_params_from_request(request: HttpRequest) -> dict:
     if not params['size'] > 0:
         raise DataFormatError("invalid page size")
     return params
-
-
-# def generic_table_query(cls, request: HttpRequest,) -> HttpResponse:
-#     """
-#     generic query on one table
-#     """
-
-#     resp = HttpResponse()
-
-#     if request.method == "GET":
-
-#         params = request.GET.dict()
-#         obj_set = cls.objects.filter(**params)
-#         if obj_set:
-#             resp.write(serialize_models(obj_set))
-#             resp.status_code = Status.OK
-#         else:
-#             resp.status_code = Status.NOT_FOUND
-#             resp.write("The requested resource does not exist!")
-
-#     elif request.method == "PUT":
-#         obj_set = json.loads(request.body)
-#         if type(obj_set) is not list:
-#             obj_set = [obj_set]
-#         target_set = [cls.objects.get(id=obj.get('id')) for obj in obj_set]
-#         all_exists = (len(target_set) == len(obj_set))
-#         if all_exists:
-#             [target.set_fields(**obj)
-#              for target, obj in zip(target_set, obj_set)]
-#             count_update = cls.objects.bulk_update(
-#                 target_set, fields=cls.query_editable_fields, batch_size=get_batch_size(target_set))
-#             resp.status_code = Status.UPDATED
-#             resp.write(f"Update Success on {count_update} Rows!")
-#         else:
-#             resp.status_code = Status.NOT_FOUND
-#             resp.write("The requested resource does not exist!")
-#     elif request.method == "POST":
-#         obj_set = json.loads(request.body)
-#         if type(obj_set) is not list:
-#             obj_set = [obj_set]
-#         data_valid = all([not (obj.get('id')) for obj in obj_set])
-#         if obj_set:
-#             if data_valid:
-#                 obj_set = [cls(**obj) for obj in obj_set]
-#                 obj_created = cls.objects.bulk_create(
-#                     obj_set, batch_size=get_batch_size(obj_set))
-#                 count_created = len(obj_created)
-#                 resp.status_code = Status.CREATED
-#                 resp.write(f"Create Success on {count_created} Rows!")
-#             else:
-#                 resp.status_code = Status.DATA_FORMAT_ERROR
-#                 resp.write(
-#                     "Format of the provided data do not meet the requirements!")
-#         else:
-#             resp.status_code = Status.BAD_REQUEST
-#             resp.write("Bad Request!")
-#     else:
-#         resp.status_code = Status.METHOD_NOT_ALLOWED
-#         resp.write("Method Not Allowed!")
-#     return resp
 
 
 def generic_paginated_query(cls, pager_params, **kwargs) -> HttpResponse:

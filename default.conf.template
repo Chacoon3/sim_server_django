@@ -1,0 +1,35 @@
+server {
+    listen 80;
+    server_name ${BMGT435_INDEX};
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name ${BMGT435_INDEX};
+
+       ssl_certificate      /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem; # managed by Certbot
+       ssl_certificate_key  /etc/letsencrypt/live/${DOMAIN_NAME}/privkey.pem; # managed by Certbot
+       include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+       ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+       ssl_session_cache    shared:SSL:1m;
+       ssl_session_timeout  5m;
+
+       ssl_ciphers  HIGH:!aNULL:!MD5;
+       ssl_prefer_server_ciphers  on;
+
+    root html;
+    index index.html;
+
+    location /admin {
+        proxy_pass ${BMGT435_SERVICE};
+    }
+
+    location /bmgt435 {
+        proxy_pass ${BMGT435_SERVICE};
+    }
+}

@@ -4,6 +4,7 @@ import time
 import random
 import os
 
+
 def CORSMiddleware(get_response):
     
     origin = os.environ.get("BMGT435_INDEX")
@@ -30,7 +31,6 @@ def CORSMiddleware(get_response):
     return middleware
 
 
-
 def AuthenticationMiddleware(get_response):
 
     ADMIN_ROLE = "admin"
@@ -42,7 +42,7 @@ def AuthenticationMiddleware(get_response):
         requests without valid cookies will be rejected
         """
         
-        if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin"):
+        if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin") or request.path.startswith("/static/"):
             return get_response(request)
         elif request.path.startswith("/bmgt435/api/manage/"):
             request_valid = bool(request.COOKIES.get('id', None) and request.COOKIES.get('role', None) == ADMIN_ROLE)
