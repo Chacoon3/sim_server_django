@@ -20,7 +20,7 @@ urlpatterns = [
     path('api/groups/leave', GroupApi.leave_group, ),
 
 
-    path('api/cases/get', CaseApi.get_case, ),
+    path('api/cases/get', CaseApi.get, ),
     path('api/cases/paginated', CaseApi.cases_paginated,),
     path('api/cases/submit', CaseApi.submit, ),
 
@@ -29,14 +29,13 @@ urlpatterns = [
     path('api/case-records/file/get', CaseRecordApi.get_case_record_file, ),
     path('api/case-records/paginated', CaseRecordApi.case_records_paginated,),
 
+
     path("api/leader-board/paginated", CaseRecordApi.leader_board_paginated ),
-
-
-    # path("api/tags", TagApi.tags, name="tags"),
-    # path("api/tags/paginated", TagApi.tags_paginated,),
 
 
     path('api/manage/import-users', ManageApi.import_users,),
     path('api/manage/view-users', ManageApi.view_users,),
-    # path('api/manage/clean/groups', ManageApi.clean_groups,),
+    path('api/manage/system/status', ManageApi.system_status,),
+    
+    path('api/feedback/post', FeedbackApi.post, ),
 ]

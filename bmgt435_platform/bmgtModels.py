@@ -17,7 +17,7 @@ class BinaryIntegerFlag(models.IntegerChoices):
     TRUE = 1
 
 
-class DbModelBase(models.Model):
+class BMGTModelBase(models.Model):
     class Meta:
         abstract = True
         app_label = APP_LABEL
@@ -52,7 +52,7 @@ class DbModelBase(models.Model):
         raise NotImplementedError()
 
 
-class BMGTTag(DbModelBase):
+class BMGTTag(BMGTModelBase):
 
     query_editable_fields = ['name', ]
     name = models.CharField(max_length=10, null=False, unique=True, default='')
@@ -64,14 +64,14 @@ class BMGTTag(DbModelBase):
         }
 
 
-class BMGTGroup(DbModelBase):
+class BMGTGroup(BMGTModelBase):
 
     @property
     def users(self) -> QuerySet:
         return BMGTUser.objects.filter(group_id=self.id)
 
     @property
-    def name(self):
+    def name(self) -> str:
         return f"Group {self.id}"
 
     def as_dictionary(self) -> dict:
@@ -82,7 +82,7 @@ class BMGTGroup(DbModelBase):
         }
 
 
-class BMGTUser(DbModelBase):
+class BMGTUser(BMGTModelBase):
 
     class BMGTUserRole(models.TextChoices):
         ADMIN = 'admin'
@@ -129,7 +129,7 @@ class BMGTUser(DbModelBase):
         )
 
 
-class BMGTTagged(DbModelBase):
+class BMGTTagged(BMGTModelBase):
 
     query_editable_fields = ["tag_id", "user_id", ]
 
@@ -145,14 +145,13 @@ class BMGTTagged(DbModelBase):
         )
 
 
-class BMGTCase(DbModelBase):
+class BMGTCase(BMGTModelBase):
 
     query_editable_fields = ["name", "description", ]
 
     name = models.CharField(max_length=50, null=False, default='')
     visible = models.IntegerField(
         BinaryIntegerFlag.choices, default=BinaryIntegerFlag.TRUE, null=False)
-    # how many times a user can submit for this case
     max_submission = models.IntegerField(default=5, null=False, unique=False)
 
     def as_dictionary(self) -> dict:
@@ -163,7 +162,7 @@ class BMGTCase(DbModelBase):
         )
 
 
-class BMGTCaseRecord(DbModelBase):
+class BMGTCaseRecord(BMGTModelBase):
 
     query_editable_fields = ["group_id", "case_id", "score", ]
 
@@ -191,21 +190,23 @@ class BMGTCaseRecord(DbModelBase):
         return f"{self.case_id.name}_{self.group_id.name}_record_index_{self.id}.xlsx"
 
     def as_dictionary(self) -> dict:
+
         return dict(
-            id=self.id,
-            create_time=self.formatted_create_time,
-            group_id=self.group_id.id,
-            user_id=self.user_id.id,
-            user_name=self.user_id.name,
-            group_name=self.group_id.name,
-            case_id=self.case_id.id,
-            case_name=self.case_id.name,
-            state=self.State.choices[self.state][1],
-            score=self.score,
+                id=self.id,
+                create_time=self.formatted_create_time,
+                group_id=self.group_id.id if self.group_id else None,
+                user_id=self.user_id.id if self.user_id else None,
+                user_name=self.user_id.name if self.user_id else 'Unknown user',
+                group_name=self.group_id.name if self.group_id else 'Unknown group',
+                case_id=self.case_id.id if self.case_id else None,
+                case_name=self.case_id.name if self.case_id else 'Unknown case',
+                state=self.State.choices[self.state][1],
+                score=self.score,
         )
 
 
-class CaseConfig(DbModelBase):
+
+class CaseConfig(BMGTModelBase):
 
     query_editable_fields = ["case_id", "config_json", ]
 
@@ -220,21 +221,4 @@ class CaseConfig(DbModelBase):
             case_id=self.case_id.id,
             case_name=self.case_id.name,
             config_json=self.config_json,
-        )
-
-
-class BMGTFeedback(DbModelBase):
-
-
-    id = models.AutoField(auto_created=True, primary_key=True, null=False)
-    user_id = models.ForeignKey(BMGTUser, on_delete=models.SET_NULL, null=True,)
-    content = models.TextField(null=False, default='')
-
-    def as_dictionary(self) -> dict:
-        return dict(
-            id=self.id,
-            create_time=self.formatted_create_time,
-            user_id=self.user_id.id,
-            user_name=self.user_id.name,
-            content=self.content,
         )

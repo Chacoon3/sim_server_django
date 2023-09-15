@@ -3,6 +3,7 @@ from django.http import HttpRequest, HttpResponse
 import time 
 import random
 import os
+from ..bmgtModels import BMGTUser
 
 
 def CORSMiddleware(get_response):
@@ -11,9 +12,9 @@ def CORSMiddleware(get_response):
     def config_cors_response(resp: HttpResponse):
             resp["Access-Control-Allow-Origin"] = origin
             resp["Access-Control-Allow-Credentials"] = "true"
-            resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+            resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, x-xsrf-token'
             resp['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            resp['Access-Control-Expose-Headers'] = 'cookie, set-cookie'
+            resp['Access-Control-Expose-Headers'] = 'cookie, set-cookie, x-xsrf-token'
             resp['UseHttpOnly'] = '1'
     
     def middleware(request: HttpRequest):
@@ -40,16 +41,27 @@ def AuthenticationMiddleware(get_response):
         assert the validity of cookies
         apart from registration and password retrieval operations, all other operations require cookies
         requests without valid cookies will be rejected
+
+        authentication rules:
+        1. authentication api's are always allowed
+        2. user utility api's are allowed if there is a user id cookie
+        3. manage api's are allowed if there is a user id cookie, and if the user is an admin (validated by a database query)
         """
         
         if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin") or request.path.startswith("/static/"):
             return get_response(request)
         elif request.path.startswith("/bmgt435/api/manage/"):
-            request_valid = bool(request.COOKIES.get('id', None) and request.COOKIES.get('role', None) == ADMIN_ROLE)
-            if request_valid:
-                return get_response(request)
+            uid = request.COOKIES.get('id', None)
+            if uid:
+                user = BMGTUser.objects.filter(id=uid, role=ADMIN_ROLE, activated=1)
+                if user.exists() and user.get().role == ADMIN_ROLE:
+                    return get_response(request)
+                else:
+                    resp = HttpResponse(status=Status.NOT_FOUND)
+                    resp.write("Failed to verify authentication!")
+                    return resp
             else:
-                resp = HttpResponse(status=Status.UNAUTHORIZED)
+                resp = HttpResponse(status=Status.NOT_FOUND)
                 resp.write("Failed to verify authentication!")
                 return resp
         else:
@@ -57,7 +69,7 @@ def AuthenticationMiddleware(get_response):
             if request_valid:
                 return get_response(request)
             else:
-                resp = HttpResponse(status=Status.UNAUTHORIZED)
+                resp = HttpResponse(status=Status.NOT_FOUND)
                 resp.write("Failed to verify authentication!")
                 return resp
 

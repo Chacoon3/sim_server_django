@@ -95,7 +95,7 @@ def password_valid(password: str) -> bool:
     password strength validation
     """
 
-    leng_valid = len(password) >= 8
+    leng_valid = len(password) >= 8 and len(password) <= 20
     has_char = bool(re.search(pattern=r'\w', string=password))
     has_num = bool(re.search(pattern=r'\d', string=password))
     return leng_valid and has_char and has_num

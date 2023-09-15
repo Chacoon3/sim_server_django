@@ -29,8 +29,8 @@ if DEBUG:
     print('Base dir is \t', BASE_DIR)
 
 
-ALLOWED_HOSTS = ['app', '127.0.0.1', 'localhost'] # set so because the frontend use this name to access the backend, which is a docker network alias
-CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1', os.environ.get("BMGT435_INDEX")]
+ALLOWED_HOSTS = ['app', '127.0.0.1', 'localhost', 'chaconn3.me'] # set so because the frontend use this name to access the backend, which is a docker network alias
+CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1', os.environ.get("BMGT435_INDEX") or 'http://localhost'] # set so because the frontend use this name to access the backend, which is a docker network alias
 
 MEDIA_ROOT = BASE_DIR.absolute().as_posix() + '/media/'
 if  DEBUG:
@@ -55,7 +55,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -87,26 +87,34 @@ ASGI_APPLICATION = 'sim_server_django.asgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
+# DATABASE_ROUTERS = ['bmgt435_platform.utils.databaseUtils.BMGT435_DB_Router', ]
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get("BMGT435_MYSQL_DB"),
-        "HOST":os.environ.get("BMGT435_MYSQL_HOST"),
-        "PORT":3306,
-        "USER":os.environ.get("BMGT435_MYSQL_USER"),
-        "PASSWORD":os.environ.get("BMGT435_MYSQL_PASSWORD"),
-        'MYSQL': {
-            'driver': 'pymysql',
-            'charset': 'utf8mb4',
-        },
-    }
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    },
+    # 'analytics': {
+    #     'ENGINE': 'django.db.backends.sqlite3',
+    #     'NAME': BASE_DIR / 'analytics.sqlite3',
+    # }
 }
+
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': os.environ.get("BMGT435_MYSQL_DB"),
+#         "HOST":os.environ.get("BMGT435_MYSQL_HOST"),
+#         "PORT":3306,
+#         "USER":os.environ.get("BMGT435_MYSQL_USER"),
+#         "PASSWORD":os.environ.get("BMGT435_MYSQL_PASSWORD"),
+#         'MYSQL': {
+#             'driver': 'pymysql',
+#             'charset': 'utf8mb4',
+#         },
+#     }
+# }
 
 
 # Password validation

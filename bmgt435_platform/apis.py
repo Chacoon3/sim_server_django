@@ -6,6 +6,7 @@ from django.db import IntegrityError
 from .apps import bmgt435_file_sys
 from .simulation.Cases import FoodCenter
 from .bmgtModels import *
+import bmgt435_platform.bmgtAnalyticsModel as bmgtAnalyticsModel
 from .utils.statusCode import Status
 from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulation_result
 from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params
@@ -83,7 +84,7 @@ class AuthApi:
             else:
                 resp.status_code = Status.BAD_REQUEST
                 resp.write(
-                    "Sign up failed! Password should contain at least 8 alphanumeric characters!")
+                    "Sign up failed! Password should contain at least 8 and up to 20 alphanumeric characters!")
         else:
             resp.status_code = Status.NOT_FOUND
             resp.write("Sign up failed! Please check your directory ID!")
@@ -205,7 +206,7 @@ class GroupApi:
             user.group_id = new_group
             user.save()
             resp.write(serialize_model_instance(new_group))
-            resp.status_code = Status.CREATED
+            resp.status_code = Status.OK
         else:
             resp.write(
                 "Cannot create another group while you are alreay in a group!")
@@ -285,7 +286,7 @@ class CaseApi:
     @request_error_handler
     @require_GET
     @staticmethod
-    def get_case(request: HttpRequest) -> HttpResponse:
+    def get(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
         case_id = request.GET.get('case_id', None)
         case_query = case_id and BMGTCase.objects.filter(
@@ -477,7 +478,6 @@ class CaseRecordApi:
             group = user.get().group_id
             if not group:
                 resp = HttpResponse()
-                resp.write("")
                 resp.status_code = Status.NOT_FOUND
                 return resp
             else:
@@ -555,20 +555,6 @@ class ManageApi:
 
         return resp
 
-    # @request_error_handler
-    # @staticmethod
-    # @require_POST
-    # def clean_groups(request: HttpRequest) -> HttpResponse:
-    #     resp = HttpResponse()
-    #     count_deleted = 0
-    #     for group in BMGTGroup.objects.iterator():
-    #         if group.users.exists() == False:
-    #             group.delete()
-    #             count_deleted += 1
-    #     resp.status_code = Status.DELETED
-    #     resp.write(f"{count_deleted} dirty groups deleted!")
-    #     return resp
-
     @request_error_handler
     @require_POST
     @staticmethod
@@ -586,3 +572,58 @@ class ManageApi:
     @staticmethod
     def view_users(request: HttpRequest) -> HttpResponse:
         return generic_paginated_query(BMGTUser, pager_params_from_request(request))
+    
+    @request_error_handler
+    @require_GET
+    @staticmethod
+    def system_status(request: HttpRequest) -> HttpResponse:
+        resp = HttpResponse()
+
+        count_users = BMGTUser.objects.count()
+        count_active_users = BMGTUser.objects.filter(activated=1).count()
+        count_groups = BMGTGroup.objects.count()
+        count_cases = BMGTCase.objects.count()
+        count_case_records = BMGTCaseRecord.objects.count()
+        count_case_records_success = BMGTCaseRecord.objects.filter(state=BMGTCaseRecord.State.SUCCESS).count()
+
+        resp.write(json.dumps({
+            "count_users": count_users,
+            "count_active_users": count_active_users,
+            "count_groups": count_groups,
+            "count_cases": count_cases,
+            "count_case_records": count_case_records,
+            "count_case_records_success": count_case_records_success,
+        }))
+
+        resp.status_code = Status.OK
+        return resp       
+
+
+
+class FeedbackApi:
+
+    @request_error_handler
+    @require_POST
+    @staticmethod
+    def post(request: HttpRequest) -> HttpResponse:
+        resp = HttpResponse()
+
+        data = json.loads(request.body)
+        uid = data.get('user_id', None)
+        content = data.get('content', None)
+
+        if uid and content:
+            user = BMGTUser.objects.filter(id=uid, activated=1, )
+            if user.exists():
+                feedback = bmgtAnalyticsModel.BMGTFeedback(user_id=user.get(), content=content)
+                feedback.save()
+                resp.status_code = Status.OK
+                resp.write("Feedback submitted!")
+            else:
+                resp.status_code = Status.NOT_FOUND
+                resp.write("Invalid user credentials!")
+        else:
+            resp.status_code = Status.BAD_REQUEST
+            resp.write("Invalid data format!")
+
+        return resp

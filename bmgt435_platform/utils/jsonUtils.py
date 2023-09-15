@@ -1,6 +1,6 @@
 from django.db.models import QuerySet
 from bmgt435_platform.simulation.Cases import SimulationResult
-from ..bmgtModels import DbModelBase
+from ..bmgtModels import BMGTModelBase
 
 import numpy as np
 import json
@@ -22,11 +22,11 @@ class CustomJSONEncoder(json.JSONEncoder):
 
 
 
-def serialize_models(querySet:QuerySet | list[DbModelBase]) -> str:
+def serialize_models(querySet:QuerySet | list[BMGTModelBase]) -> str:
     return json.dumps([model.as_dictionary() for model in querySet], cls=CustomJSONEncoder)
 
 
-def serialize_model_instance(instance:DbModelBase) -> str:
+def serialize_model_instance(instance:BMGTModelBase) -> str:
     return json.dumps(instance.as_dictionary(), cls=CustomJSONEncoder)
 
 

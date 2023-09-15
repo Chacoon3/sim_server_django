@@ -1,7 +1,6 @@
 services:
 
   app:
-    # build: .
     image: chaconn3/bmgt435_service
     restart: always
     ports:
@@ -12,10 +11,15 @@ services:
       BMGT435_MYSQL_USER: root
       BMGT435_MYSQL_PASSWORD: root
       BMGT435_MYSQL_DB: bmgt435-mysql # name of the database
+
+      ANALYTICS_MYSQL_HOST: mysql
+      ANALYTICS_MYSQL_USER: root
+      ANALYTICS_MYSQL_PASSWORD: root
+      ANALYTICS_MYSQL_DB: bmgt435-analytics # name of the database
     depends_on:
       - mysql
   
-  mysql:
+  mysql: # main db
     image: mysql:8.0
     restart: always
     ports:
@@ -26,17 +30,29 @@ services:
     volumes:
       - bmgt435-mysql:/var/lib/mysql
 
-  # index:
-  #   image: chaconn3/bmgt435_index
+  # mysql-analytics: # analytics db
+  #   image: mysql:8.0
   #   restart: always
   #   ports:
-  #     - 80:80
+  #     - 3306:3306
   #   environment:
-  #     DOMAIN_NAME: chaconn3.me
-  #     BMGT435_SERVICE: http://app:8000
-  #   depends_on:
-  #     - app
-    
+  #     MYSQL_DATABASE: bmgt435-analytics
+  #     MYSQL_ROOT_PASSWORD: root
+  #   volumes:
+  #     - bmgt435-mysql:/var/lib/mysql
+
+  nginx:
+    image: nginx:1.25.2-alpine
+    restart: always
+    ports:
+      - 80:80
+    volumes:
+      - ./default.conf.template:/etc/nginx/templates/default.conf.template
+    environment:
+      - BMGT435_SERVICE=app:8000
+    depends_on:
+      - app
+
 
 volumes:
   bmgt435-mysql:
