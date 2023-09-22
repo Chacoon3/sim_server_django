@@ -1,22 +1,23 @@
 from ..utils.statusCode import Status
 from django.http import HttpRequest, HttpResponse
-import time 
+import time
 import random
 import os
 from ..bmgtModels import BMGTUser
 
 
 def CORSMiddleware(get_response):
-    
+
     origin = os.environ.get("BMGT435_INDEX")
+
     def config_cors_response(resp: HttpResponse):
-            resp["Access-Control-Allow-Origin"] = origin
-            resp["Access-Control-Allow-Credentials"] = "true"
-            resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, x-xsrf-token'
-            resp['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-            resp['Access-Control-Expose-Headers'] = 'cookie, set-cookie, x-xsrf-token'
-            resp['UseHttpOnly'] = '1'
-    
+        resp["Access-Control-Allow-Origin"] = origin
+        resp["Access-Control-Allow-Credentials"] = "true"
+        resp['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, x-xsrf-token'
+        resp['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        resp['Access-Control-Expose-Headers'] = 'cookie, set-cookie, x-xsrf-token'
+        resp['UseHttpOnly'] = '1'
+
     def middleware(request: HttpRequest):
 
         if request.method == 'OPTIONS':
@@ -28,7 +29,7 @@ def CORSMiddleware(get_response):
             resp = get_response(request)
             config_cors_response(resp)
             return resp
-    
+
     return middleware
 
 
@@ -47,27 +48,30 @@ def AuthenticationMiddleware(get_response):
         2. user utility api's are allowed if there is a user id cookie
         3. manage api's are allowed if there is a user id cookie, and if the user is an admin (validated by a database query)
         """
-        
-        if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin") or request.path.startswith("/static/"):
+
+        # no authentication required
+        if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin"):
             return get_response(request)
-        elif request.path.startswith("/bmgt435/api/manage/"):
-            uid = request.COOKIES.get('id', None)
-            if uid:
-                user = BMGTUser.objects.filter(id=uid, role=ADMIN_ROLE, activated=1)
-                if user.exists() and user.get().role == ADMIN_ROLE:
-                    return get_response(request)
-                else:
-                    resp = HttpResponse(status=Status.NOT_FOUND)
-                    resp.write("Failed to verify authentication!")
-                    return resp
-            else:
-                resp = HttpResponse(status=Status.NOT_FOUND)
-                resp.write("Failed to verify authentication!")
-                return resp
+
+        user_id = request.COOKIES.get('id', None)
+        if not user_id:
+            resp = HttpResponse(status=Status.NOT_FOUND)
+            resp.write("Failed to verify authentication!")
+            return resp
         else:
-            request_valid = bool(request.COOKIES.get('id', None))
-            if request_valid:
-                return get_response(request)
+            user = BMGTUser.objects.filter(
+                id=user_id, activated=1)
+            if user.exists():
+                # admin authentication required
+                if request.path.startswith("/bmgt435/api/manage/"):
+                    if user.get().role == ADMIN_ROLE:
+                        return get_response(request)
+                    else:
+                        resp = HttpResponse(status=Status.NOT_FOUND)
+                        resp.write("Failed to verify authentication!")
+                        return resp
+                else:      # user authentication required             
+                     return get_response(request)
             else:
                 resp = HttpResponse(status=Status.NOT_FOUND)
                 resp.write("Failed to verify authentication!")
@@ -76,13 +80,13 @@ def AuthenticationMiddleware(get_response):
     return middleware
 
 
-def TestModeMiddleware(get_response):
-    # add random lag to simulate network latency
-    def middleware(request: HttpRequest):
-        if not request.path.startswith("/bmgt435/api/manage/") and not request.path.startswith("/admin/"):
-            lag = random.randint(0, 20)
-            lag = round(lag / 10, 1)
-            time.sleep(lag) 
-        return get_response(request)
+# def TestModeMiddleware(get_response):
+#     # add random lag to simulate network latency
+#     def middleware(request: HttpRequest):
+#         if not request.path.startswith("/bmgt435/api/manage/") and not request.path.startswith("/admin/"):
+#             lag = random.randint(0, 20)
+#             lag = round(lag / 10, 1)
+#             time.sleep(lag)
+#         return get_response(request)
 
-    return middleware
+#     return middleware

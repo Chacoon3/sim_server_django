@@ -45,7 +45,7 @@ def request_error_handler(func):
 
         except KeyError as e:
             resp = HttpResponse()
-            resp.status_code = Status.INTERNAL_SERVER_ERROR
+            resp.status_code = Status.BAD_REQUEST
             resp.write(f'Key missing: {e.args[0]}')
 
         except IntegrityError as e:
