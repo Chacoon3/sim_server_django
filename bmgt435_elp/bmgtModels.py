@@ -1,7 +1,8 @@
-from typing import Any
 from django.db import models
 from django.db.models import QuerySet
+from django.conf import settings
 from django.utils import timezone
+from .apps import BmgtPlatformConfig
 import random
 
 """
@@ -10,7 +11,7 @@ import random
 """
 
 
-APP_LABEL = "bmgt435_platform"
+APP_LABEL = BmgtPlatformConfig.name
 
 
 class BinaryIntegerFlag(models.IntegerChoices):
@@ -82,6 +83,7 @@ class BMGTSemester(BMGTModelBase):
             "id": self.id,
             "year": self.year,
             "season": self.season,
+            "name": self.name,
         }
 
 
@@ -128,7 +130,7 @@ class BMGTUser(BMGTModelBase):
                             default=BMGTUserRole.USER, null=False, max_length=5)
     group = models.ForeignKey(
         BMGTGroup, on_delete=models.SET_NULL, null=True)
-    semester = models.ForeignKey(BMGTSemester, on_delete=models.SET_NULL, null=True)
+    semester = models.ForeignKey(BMGTSemester, on_delete=models.SET_NULL, null=True)  # allow null for admin
 
     @property
     def name(self):
@@ -186,7 +188,7 @@ class BMGTCaseRecord(BMGTModelBase):
         """
         name of the detailed case record which is stored on the server, does not contain directory info
         """
-        return f"{group.id}_{user.id}_{case.id}_{random.randint(0,99999):6d}.xlsx"
+        return f"{group.id}_{user.id}_{case.id}_{random.randint(0,99999):06d}.xlsx"
 
     group = models.ForeignKey(
         BMGTGroup, on_delete=models.SET_NULL, null=True,)
@@ -199,6 +201,11 @@ class BMGTCaseRecord(BMGTModelBase):
         State.choices, default=State.RUNNING, null=False)
     summary_dict = models.TextField(null=False, default="")
     file_name = models.CharField(max_length=30, null=False, auto_created=False, editable=False, unique=True)
+
+    @property
+    def file_url(self) -> str:
+        return f"{settings.STATIC_URL}bmgt435/case_record/{self.file_name}"
+
 
     def as_dictionary(self) -> dict:
 

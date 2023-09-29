@@ -1,5 +1,5 @@
 from django.db.models import QuerySet
-from bmgt435_platform.simulation.Cases import SimulationResult
+from bmgt435_elp.simulation.Cases import SimulationResult
 from ..bmgtModels import BMGTModelBase
 
 import numpy as np

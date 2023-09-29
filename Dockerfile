@@ -25,9 +25,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     python -m pip install -r requirements.txt
 
 # Copy the source code into the container.
-COPY . .
+COPY ./bmgt435_elp ./bmgt435_elp
+COPY ./sim_server_django ./sim_server_django
+COPY ./manage.py ./manage.py
+COPY ./static/admin ./static/admin
 
 USER root
+RUN mkdir /app/media
 # give permissions to media folder which stores the detailed case records
 RUN chown -R appuser /app/media
 RUN chmod -R 700 /app/media
@@ -41,6 +45,7 @@ USER appuser
 # Expose the port that the application listens on.
 EXPOSE 8000
 # Run the application with daphne asgi server
-CMD python manage.py makemigrations && python manage.py migrate && gunicorn -b 0.0.0.0:8000 sim_server_django.wsgi:application
-# CMD python manage.py makemigrations && python manage.py migrate && daphne -b 0.0.0.0 -p 8000 sim_server_django.asgi:application
+
+# CMD python manage.py makemigrations && python manage.py migrate && gunicorn -b 0.0.0.0:8000 sim_server_django.wsgi:application
+CMD python manage.py makemigrations && python manage.py migrate && daphne -b 0.0.0.0 -p 8000 sim_server_django.asgi:application
 # CMD python manage.py makemigrations && python manage.py migrate && python manage.py runserver

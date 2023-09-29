@@ -1,7 +1,5 @@
 from ..utils.statusCode import Status
 from django.http import HttpRequest, HttpResponse
-import time
-import random
 import os
 from ..bmgtModels import BMGTUser
 
@@ -59,12 +57,13 @@ def AuthenticationMiddleware(get_response):
             resp.write("Failed to verify authentication!")
             return resp
         else:
-            user = BMGTUser.objects.filter(
-                id=user_id, activated=1)
-            if user.exists():
+            user_query = BMGTUser.objects.filter(id=user_id, activated=1)
+            if user_query.exists():
+                user = user_query.get()
+                request.bmgt_user = user    # store the user info
                 # admin authentication required
                 if request.path.startswith("/bmgt435/api/manage/"):
-                    if user.get().role == ADMIN_ROLE:
+                    if user.role == ADMIN_ROLE:
                         return get_response(request)
                     else:
                         resp = HttpResponse(status=Status.NOT_FOUND)
