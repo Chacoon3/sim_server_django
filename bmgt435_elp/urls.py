@@ -42,6 +42,7 @@ urlpatterns = [
     path('api/manage/semester/all', ManageApi.get_semesters,),
 
     path('api/manage/system/status', ManageApi.system_status,),
+    path('api/manage/feedback/paginated', FeedbackApi.feedback_paginated,),
 
     
     path('api/feedback/post', FeedbackApi.post, ),

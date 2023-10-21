@@ -90,7 +90,7 @@ class BMGTSemester(BMGTModelBase):
 class BMGTGroup(BMGTModelBase):
 
     number = models.IntegerField(null=False, unique=False)  # group number
-    semeter = models.ForeignKey(BMGTSemester, on_delete=models.SET_NULL, null=True)
+    semester = models.ForeignKey(BMGTSemester, on_delete=models.SET_NULL, null=True)
 
     @property
     def users(self) -> QuerySet:
@@ -105,8 +105,8 @@ class BMGTGroup(BMGTModelBase):
             "id": self.id,
             "name": self.name,
             "users": [user.as_dictionary() for user in self.users],
-            "semester_id": self.semeter.id if self.semeter else None,
-            "semester_name": self.semeter.name if self.semeter else None,
+            "semester_id": self.semester.id if self.semester else None,
+            "semester_name": self.semester.name if self.semester else None,
         }
 
 class BMGTUser(BMGTModelBase):

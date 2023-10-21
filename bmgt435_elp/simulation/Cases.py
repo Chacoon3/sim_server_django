@@ -422,7 +422,7 @@ class FoodCenter(CaseBase):
 
             # check inventory
             arr_purchase = [center.s_big() - center.get_inventory() if center.get_inventory()
-                            < center.s_small() else 0 for center in centers]
+                            <= center.s_small() else 0 for center in centers]   # has to be <= here otherwise a small s equal to 0 will not work as expected
             total_purchase = sum(arr_purchase)
 
             # check if inventory request exceeds the constraint

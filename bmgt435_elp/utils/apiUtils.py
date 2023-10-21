@@ -77,12 +77,12 @@ def request_error_handler(func):
             # resp.write(e.args[0])
             # resp.status_code = Status.INTERNAL_SERVER_ERROR
 
-            if settings.DEBUG:
-                raise
-            else:
-                resp = HttpResponse()
-                resp.status_code = Status.INTERNAL_SERVER_ERROR
-                resp.write("Internal server error!")
+            # if settings.DEBUG:
+            raise
+            # else:
+                # resp = HttpResponse()
+                # resp.status_code = Status.INTERNAL_SERVER_ERROR
+                # resp.write("Internal server error!")
         
         return resp
 

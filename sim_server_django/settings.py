@@ -14,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-7+pi0)&orq-c)01-0vt$^=^jhs-m$)t3b7h-sx!i+#)lwbs^u5'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("BMGT435_DEBUG", False)
+DEBUG = os.environ.get("BMGT435_DEBUG", True)
 if DEBUG:
     print('Base dir is \t', BASE_DIR)
 
@@ -78,32 +78,32 @@ ASGI_APPLICATION = 'sim_server_django.asgi.application'
 
 # DATABASE_ROUTERS = ['bmgt435_elp.utils.databaseUtils.BMGT435_DB_Router', ]
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     },
-    # 'analytics': {
-    #     'ENGINE': 'django.db.backends.sqlite3',
-    #     'NAME': BASE_DIR / 'analytics.sqlite3',
-    # }
-# }
-
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': os.environ.get("BMGT435_MYSQL_DB"),
-        "HOST":os.environ.get("BMGT435_MYSQL_HOST"),
-        "PORT":3306,
-        "USER":os.environ.get("BMGT435_MYSQL_USER"),
-        "PASSWORD":os.environ.get("BMGT435_MYSQL_PASSWORD"),
-        'MYSQL': {
-            'driver': 'pymysql',
-            'charset': 'utf8mb4',
-        },
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    },
+    'analytics': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'analytics.sqlite3',
     }
 }
+
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': os.environ.get("BMGT435_MYSQL_DB"),
+#         "HOST":os.environ.get("BMGT435_MYSQL_HOST"),
+#         "PORT":3306,
+#         "USER":os.environ.get("BMGT435_MYSQL_USER"),
+#         "PASSWORD":os.environ.get("BMGT435_MYSQL_PASSWORD"),
+#         'MYSQL': {
+#             'driver': 'pymysql',
+#             'charset': 'utf8mb4',
+#         },
+#     }
+# }
 
 
 # Password validation

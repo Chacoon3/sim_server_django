@@ -48,7 +48,7 @@ def AuthenticationMiddleware(get_response):
         """
 
         # no authentication required
-        if request.path.startswith("/bmgt435/api/auth/") or request.path.startswith("/admin"):
+        if request.path.startswith("/bmgt435-service/api/auth/") or request.path.startswith("/bmgt435-service/admin"):
             return get_response(request)
 
         user_id = request.COOKIES.get('id', None)
@@ -62,7 +62,7 @@ def AuthenticationMiddleware(get_response):
                 user = user_query.get()
                 request.bmgt_user = user    # store the user info
                 # admin authentication required
-                if request.path.startswith("/bmgt435/api/manage/"):
+                if request.path.startswith("/bmgt435-service/api/manage/"):
                     if user.role == ADMIN_ROLE:
                         return get_response(request)
                     else:

@@ -564,3 +564,9 @@ class FeedbackApi:
             resp.write("Invalid data format!")
         
         return resp
+    
+    @request_error_handler
+    @require_GET
+    @staticmethod
+    def feedback_paginated(request: HttpRequest) -> HttpResponse:
+        return generic_paginated_query(bmgtAnalyticsModel.BMGTFeedback, pager_params_from_request(request))
