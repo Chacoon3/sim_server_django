@@ -1,13 +1,14 @@
 from django.db import models
 from django.db.models import QuerySet
 from django.utils import timezone
-import bmgt435_platform.bmgtModels as bmgtModels
+import bmgt435_elp.bmgtModels as bmgtModels
+from .apps import BmgtPlatformConfig
 
 
 class AnalyticsModelBase(models.Model):
     class Meta:
         abstract = True
-        app_label = 'bmgt435_platform'
+        app_label = BmgtPlatformConfig.name
 
     query_editable_fields = []
 
@@ -48,14 +49,14 @@ class UserActivity(AnalyticsModelBase):
 class BMGTFeedback(AnalyticsModelBase):
 
     id = models.AutoField(auto_created=True, primary_key=True, null=False)
-    user_id = models.ForeignKey(bmgtModels.BMGTUser, on_delete=models.SET_NULL, null=True,)
+    user = models.ForeignKey(bmgtModels.BMGTUser, on_delete=models.SET_NULL, null=True,)
     content = models.TextField(null=False, default='')
 
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
             create_time=self.formatted_create_time,
-            user_id=self.user_id.id,
-            user_name=self.user_id.name,
+            user_id=self.user.id,
+            user_name=self.user.name,
             content=self.content,
         )

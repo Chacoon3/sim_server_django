@@ -2,8 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, 
 from django.db import IntegrityError
 from django.core.paginator import Paginator
 from django.http import HttpRequest, HttpResponse
-
-from .customExceptions import DataFormatError
+from django.conf import settings
 from .statusCode import Status
 from .jsonUtils import serialize_paginated_data, serialize_models
 from ..simulation.Cases import SimulationException
@@ -45,7 +44,7 @@ def request_error_handler(func):
 
         except KeyError as e:
             resp = HttpResponse()
-            resp.status_code = Status.INTERNAL_SERVER_ERROR
+            resp.status_code = Status.BAD_REQUEST
             resp.write(f'Key missing: {e.args[0]}')
 
         except IntegrityError as e:
@@ -54,11 +53,6 @@ def request_error_handler(func):
             resp.write(e.args[0])
 
         except ValidationError as e:
-            resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(e.args[0])
-
-        except DataFormatError as e:
             resp = HttpResponse()
             resp.status_code = Status.BAD_REQUEST
             resp.write(e.args[0])
@@ -76,14 +70,19 @@ def request_error_handler(func):
         except ValueError as e:
             resp = HttpResponse()
             resp.write(e.args[0])
-            resp.status_code = Status.INTERNAL_SERVER_ERROR
+            resp.status_code = Status.BAD_REQUEST
 
         except Exception as e:
             # resp = HttpResponse()
             # resp.write(e.args[0])
             # resp.status_code = Status.INTERNAL_SERVER_ERROR
 
+            # if settings.DEBUG:
             raise
+            # else:
+                # resp = HttpResponse()
+                # resp.status_code = Status.INTERNAL_SERVER_ERROR
+                # resp.write("Internal server error!")
         
         return resp
 
@@ -125,11 +124,11 @@ def pager_params_from_request(request: HttpRequest) -> dict:
     params['asc'] = request.GET.get('asc', '1')
     params['order'] = request.GET.get('order', 'id')
     if not params['page'] or not params['size']:
-        raise DataFormatError("missing pagination parameters")
+        raise KeyError("missing pagination parameters")
     params['page'] = int(params['page'])
     params['size'] = int(params['size'])
     if not params['size'] > 0:
-        raise DataFormatError("invalid page size")
+        raise ValueError("invalid page size")
     return params
 
 

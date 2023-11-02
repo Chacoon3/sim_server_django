@@ -7,5 +7,3 @@ regex==2022.4.24
 scipy==1.11.2
 pymysql
 gunicorn==21.2.0
-# mysqlclient==2.1.0
-# mysqlclient==1.4.6

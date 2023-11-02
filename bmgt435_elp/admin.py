@@ -8,7 +8,7 @@ class BMGTUserAdmin(admin.ModelAdmin):
         ("None", {"fields": ["did", "first_name", "last_name", "role",]}),
     ]
     
-    list_display = ["id", "did", "first_name", "last_name", "create_time", "role", "group_id", "activated",]
+    list_display = ["id", "did", "first_name", "last_name", "create_time", "role", "group_id", "activated", "semester"]
 
 
 class CaseAdmin(admin.ModelAdmin):
@@ -29,19 +29,16 @@ class CaseRecordAdmin(admin.ModelAdmin):
 
 class GroupAdmin(admin.ModelAdmin):
 
-    list_display = ["id", "create_time",]
+    list_display = ["id", "create_time", "name"]
 
 
-class TagAdmin(admin.ModelAdmin):
-    fieldsets = [
-        ("None", {"fields": ["name"]}),
-    ]
+class SemesterAdmin(admin.ModelAdmin):
 
-    list_display = ["id", "name",]
+    list_display = ["id", "create_time", "year", "season"]
 
 
 admin.site.register(BMGTUser, BMGTUserAdmin)
 admin.site.register(BMGTCase, CaseAdmin)
 admin.site.register(BMGTCaseRecord, CaseRecordAdmin)
 admin.site.register(BMGTGroup, GroupAdmin)
-admin.site.register(BMGTTag, TagAdmin)
+admin.site.register(BMGTSemester, SemesterAdmin)

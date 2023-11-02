@@ -6,53 +6,25 @@ services:
     ports:
       - 8000:8000
     environment:
-      BMGT435_INDEX: http://localhost:5173 # for local development CORS config
-      BMGT435_MYSQL_HOST: mysql
-      BMGT435_MYSQL_USER: root
-      BMGT435_MYSQL_PASSWORD: root
-      BMGT435_MYSQL_DB: bmgt435-mysql # name of the database
-
-      ANALYTICS_MYSQL_HOST: mysql
-      ANALYTICS_MYSQL_USER: root
-      ANALYTICS_MYSQL_PASSWORD: root
-      ANALYTICS_MYSQL_DB: bmgt435-analytics # name of the database
+      APP_FRONTEND_HOST: http://localhost:4173 # for local development CORS config
+      APP_USE_MYSQL: 1
+      APP_MYSQL_HOST: mysql
+      APP_MYSQL_USER: root
+      APP_MYSQL_PASSWORD: root
+      APP_MYSQL_DB: bmgt435-mysql # name of the database
+      APP_MYSQL_PORT: 3306
+      APP_DEBUG: 1
     depends_on:
       - mysql
   
   mysql: # main db
     image: mysql:8.0
     restart: always
-    ports:
-      - 3306:3306
     environment:
       MYSQL_DATABASE: bmgt435-mysql
       MYSQL_ROOT_PASSWORD: root
     volumes:
       - bmgt435-mysql:/var/lib/mysql
-
-  # mysql-analytics: # analytics db
-  #   image: mysql:8.0
-  #   restart: always
-  #   ports:
-  #     - 3306:3306
-  #   environment:
-  #     MYSQL_DATABASE: bmgt435-analytics
-  #     MYSQL_ROOT_PASSWORD: root
-  #   volumes:
-  #     - bmgt435-mysql:/var/lib/mysql
-
-  nginx:
-    image: nginx:1.25.2-alpine
-    restart: always
-    ports:
-      - 80:80
-    volumes:
-      - ./default.conf.template:/etc/nginx/templates/default.conf.template
-    environment:
-      - BMGT435_SERVICE=app:8000
-    depends_on:
-      - app
-
 
 volumes:
   bmgt435-mysql:
