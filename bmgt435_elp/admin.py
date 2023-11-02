@@ -32,13 +32,6 @@ class GroupAdmin(admin.ModelAdmin):
     list_display = ["id", "create_time", "name"]
 
 
-# class TagAdmin(admin.ModelAdmin):
-#     fieldsets = [
-#         ("None", {"fields": ["name"]}),
-#     ]
-
-#     list_display = ["id", "name",]
-
 class SemesterAdmin(admin.ModelAdmin):
 
     list_display = ["id", "create_time", "year", "season"]
@@ -49,4 +42,3 @@ admin.site.register(BMGTCase, CaseAdmin)
 admin.site.register(BMGTCaseRecord, CaseRecordAdmin)
 admin.site.register(BMGTGroup, GroupAdmin)
 admin.site.register(BMGTSemester, SemesterAdmin)
-# admin.site.register(BMGTTag, TagAdmin)

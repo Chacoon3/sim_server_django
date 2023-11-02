@@ -1,10 +1,5 @@
-"""
-Django settings for sim_server_django project.
-
-"""
-
 from pathlib import Path
-import os
+from .config import Config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,16 +9,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-7+pi0)&orq-c)01-0vt$^=^jhs-m$)t3b7h-sx!i+#)lwbs^u5'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("BMGT435_DEBUG", True)
+DEBUG = Config.APP_DEBUG
 if DEBUG:
     print('Base dir is \t', BASE_DIR)
 
 
-INDEX_HOST = os.environ.get("BMGT435_INDEX")    # host name of the frontend
-ALLOWED_HOSTS = ['app', '127.0.0.1', 'localhost', INDEX_HOST]
+ALLOWED_HOSTS = ['app', 'localhost', Config.APP_FRONTEND_HOST]
+
 CSRF_TRUSTED_ORIGINS = [
-    'http://127.0.0.1','http://localhost', f'http://{INDEX_HOST}',
-    "https://127.0.0.1", "https://localhost", f"https://{INDEX_HOST}"
+ 'http://localhost', f'http://{Config.APP_FRONTEND_HOST}',
+"https://localhost", f"https://{Config.APP_FRONTEND_HOST}"
 ]
 
 
@@ -48,7 +43,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # 'bmgt435_elp.middlewares.bgmt435Middlewares.TestModeMiddleware',
 ]
 
 ROOT_URLCONF = 'sim_server_django.urls'
@@ -78,32 +72,28 @@ ASGI_APPLICATION = 'sim_server_django.asgi.application'
 
 # DATABASE_ROUTERS = ['bmgt435_elp.utils.databaseUtils.BMGT435_DB_Router', ]
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    },
-    'analytics': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'analytics.sqlite3',
+if Config.APP_USE_MYSQL:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': Config.APP_MYSQL_DB,
+            "HOST":Config.APP_MYSQL_HOST,
+            "PORT":Config.APP_MYSQL_PORT,
+            "USER":Config.APP_MYSQL_USER,
+            "PASSWORD":Config.APP_MYSQL_PASSWORD,
+            'MYSQL': {
+                'driver': 'pymysql',
+                'charset': 'utf8mb4',
+            },
+        }
     }
-}
-
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': os.environ.get("BMGT435_MYSQL_DB"),
-#         "HOST":os.environ.get("BMGT435_MYSQL_HOST"),
-#         "PORT":3306,
-#         "USER":os.environ.get("BMGT435_MYSQL_USER"),
-#         "PASSWORD":os.environ.get("BMGT435_MYSQL_PASSWORD"),
-#         'MYSQL': {
-#             'driver': 'pymysql',
-#             'charset': 'utf8mb4',
-#         },
-#     }
-# }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -148,7 +138,7 @@ USE_I18N = False
 
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = 'bmgt435-service/static/'
 
 STATIC_ROOT = BASE_DIR.absolute().as_posix() + '/static/'
 

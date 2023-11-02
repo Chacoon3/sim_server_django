@@ -1,8 +1,7 @@
-from django.http import HttpRequest, HttpResponse
-from django.views.decorators.http import require_POST, require_GET,  require_http_methods
+from django.http import HttpRequest, HttpResponse, FileResponse
+from django.views.decorators.http import require_POST, require_GET
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import IntegrityError
-from django.shortcuts import redirect
 
 
 from .apps import bmgt435_file_system
@@ -354,7 +353,7 @@ class CaseRecordApi:
         case_record = BMGTCaseRecord.objects.get(id=case_record_id, )
         file_name = CASE_RECORD_PATH + case_record.file_name
         with open(file_name, 'rb') as file:
-            response = HttpResponse(file.read(), content_type='octet/stream')
+            response = HttpResponse(file.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',)
             return response
         
 
@@ -527,7 +526,7 @@ class ManageApi:
         semester = BMGTSemester.objects.get(id=semester_id)
         max_group_num = BMGTGroup.objects.aggregate(max_value=Max('number'))['max_value'] or 0
         BMGTGroup.objects.bulk_create(
-            [BMGTGroup(number=max_group_num + i + 1, semeter=semester) for i in range(size)]
+            [BMGTGroup(number=max_group_num + i + 1, semester=semester) for i in range(size)]
         )
         resp.status_code = Status.OK
         return resp

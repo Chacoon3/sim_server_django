@@ -1,6 +1,4 @@
 from django.urls import path
-from django.conf import settings
-from django.conf.urls.static import static
 from .apis import *
 
 
@@ -48,4 +46,4 @@ urlpatterns = [
     path('api/feedback/post', FeedbackApi.post, ),
 
     
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) # for serving static files in development
+]
