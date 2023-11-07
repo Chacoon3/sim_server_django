@@ -24,7 +24,6 @@ class BMGTModelBase(models.Model):
         abstract = True
         app_label = APP_LABEL
 
-    # query_editable_fields = []
 
     id = models.AutoField(auto_created=True, primary_key=True, null=False)
     create_time = models.DateTimeField(auto_created=True, default=timezone.now, null=False)
@@ -39,27 +38,8 @@ class BMGTModelBase(models.Model):
 
     @property
     def formatted_create_time(self):
-        # return self.create_time.astimezone().isoformat()
         return timezone.make_naive(self.create_time).isoformat(sep=' ', timespec='seconds')
 
-    # def set_fields(self, save=False, **kwargs):
-    #     for field in kwargs.keys():
-    #         if field in self.query_editable_fields:
-    #             setattr(self, field, kwargs[field])
-    #     if save:
-    #         self.save()
-
-
-# class BMGTTag(BMGTModelBase):
-
-#     query_editable_fields = ['name', ]
-#     name = models.CharField(max_length=10, null=False, unique=True, default='')
-
-#     def as_dictionary(self) -> dict:
-#         return {
-#             "id": self.id,
-#             "name": self.name,
-#         }
 
 class BMGTSemester(BMGTModelBase):
 
@@ -109,27 +89,21 @@ class BMGTGroup(BMGTModelBase):
             "semester_name": self.semester.name if self.semester else None,
         }
 
+
 class BMGTUser(BMGTModelBase):
 
     class BMGTUserRole(models.TextChoices):
         ADMIN = 'admin'
         USER = 'user'
 
-    # query_editable_fields = ["first_name",
-    #                          "last_name", "role", "group_id", "activated", ]
-
-    did = models.CharField(
-        max_length=60, auto_created=False, null=False, unique=True,)
+    did = models.CharField(max_length=60, auto_created=False, null=False, unique=True, db_index=True)
     first_name = models.CharField(max_length=60, null=False)
     last_name = models.CharField(max_length=60, null=False)
     # stores the password hash
     password = models.CharField(max_length=100,  null=False, default="")
-    activated = models.IntegerField(
-        choices=BinaryIntegerFlag.choices, default=BinaryIntegerFlag.FALSE, null=False,)
-    role = models.CharField(choices=BMGTUserRole.choices,
-                            default=BMGTUserRole.USER, null=False, max_length=5)
-    group = models.ForeignKey(
-        BMGTGroup, on_delete=models.SET_NULL, null=True)
+    activated = models.IntegerField(choices=BinaryIntegerFlag.choices, default=BinaryIntegerFlag.FALSE, null=False,)
+    role = models.CharField(choices=BMGTUserRole.choices, default=BMGTUserRole.USER, null=False, max_length=5)
+    group = models.ForeignKey(BMGTGroup, on_delete=models.SET_NULL, null=True)
     semester = models.ForeignKey(BMGTSemester, on_delete=models.SET_NULL, null=True)  # allow null for admin
 
     @property
@@ -161,8 +135,6 @@ class BMGTUser(BMGTModelBase):
 
 class BMGTCase(BMGTModelBase):
 
-    # query_editable_fields = ["name", "description", ]
-
     name = models.CharField(max_length=50, null=False, default='')
     visible = models.BooleanField(default=True, null=False)
     max_submission = models.IntegerField(default=5, null=False, unique=False)
@@ -176,8 +148,6 @@ class BMGTCase(BMGTModelBase):
 
 
 class BMGTCaseRecord(BMGTModelBase):
-
-    # query_editable_fields = ["group_id", "case_id", "score", ]
 
     class State(models.IntegerChoices):
         RUNNING = 0
@@ -227,8 +197,6 @@ class BMGTCaseRecord(BMGTModelBase):
 
 class CaseConfig(BMGTModelBase):
 
-    # query_editable_fields = ["case_id", "config_json", ]
-
     case = models.ForeignKey(
         BMGTCase, on_delete=models.CASCADE, null=False,)
     config_json = models.TextField(null=False, default='')
@@ -240,4 +208,67 @@ class CaseConfig(BMGTModelBase):
             case_id=self.case.id,
             case_name=self.case.name,
             config_json=self.config_json,
+        )
+    
+
+    def as_dictionary(self) -> dict:
+        """
+        global interface for json serialization
+        should be implemented by all subclasses
+        the dictionary should be json serializable
+        """
+        raise NotImplementedError("as dictionary method not implemented")
+    
+
+    @property
+    def formatted_create_time(self):
+        return timezone.make_naive(self.create_time).isoformat(sep=' ', timespec='seconds')
+    
+
+class BMGTTransaction(BMGTModelBase):
+
+    DEVICE_MAX_LENGTH = 20
+    IP_MAX_LENGTH = 20
+    
+    METHOD= [
+        ('GET', 'GET'),
+        ('POST', 'POST'),
+        ('PUT', 'PUT'),
+        ('DELETE', 'DELETE'),
+    ]
+
+    user = models.ForeignKey(BMGTUser, on_delete=models.SET_NULL, null=True)
+    method = models.CharField(choices=METHOD, max_length=10, null=False, default='UNKNOWN')
+    path = models.CharField(max_length=100, null=False, default='')
+    status_code = models.IntegerField(null=False, default=0)
+    ip = models.CharField(max_length=IP_MAX_LENGTH, null=False, default='')
+    device = models.CharField(max_length=DEVICE_MAX_LENGTH, null=False, default='')
+
+    def as_dictionary(self) -> dict:
+        return dict(
+            id=self.id,
+            create_time=self.formatted_create_time,
+            user_id=self.user.id,
+            user_name=self.user.name,
+            method=self.method,
+            path=self.path,
+            status_code=self.status_code,
+            ip=self.ip,
+            device=self.device,
+        )
+
+
+class BMGTFeedback(BMGTModelBase):
+
+    id = models.AutoField(auto_created=True, primary_key=True, null=False)
+    user = models.ForeignKey(BMGTUser, on_delete=models.SET_NULL, null=True,)
+    content = models.TextField(null=False, default='')
+
+    def as_dictionary(self) -> dict:
+        return dict(
+            id=self.id,
+            create_time=self.formatted_create_time,
+            user_id=self.user.id,
+            user_name=self.user.name,
+            content=self.content,
         )

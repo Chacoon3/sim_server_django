@@ -6,6 +6,7 @@ from django.conf import settings
 from .statusCode import Status
 from .jsonUtils import serialize_paginated_data, serialize_models
 from ..simulation.Cases import SimulationException
+from ..bmgtModels import BMGTTransaction
 
 import regex as re
 import json
@@ -152,3 +153,28 @@ def generic_paginated_query(cls, pager_params, **kwargs) -> HttpResponse:
         resp.write(serialize_paginated_data(pager, pager_params['page']))
         resp.status_code = Status.OK
     return resp
+
+
+def __log_event(request: HttpRequest, status_code: int):
+    try:
+        user = request.user or None
+        ip = request.META.get('REMOTE_ADDR')[:BMGTTransaction.IP_MAX_LENGTH]
+        device = request.META.get('HTTP_USER_AGENT')[:BMGTTransaction.DEVICE_MAX_LENGTH]
+        path = request.path
+        met = request.method
+        new_record = BMGTTransaction(user = user, ip = ip, device= device, method=met, path=path, status_code=status_code)
+        new_record.save()
+    except Exception as e:
+        raise e
+    
+
+def logger(func):
+    def wrapper(request: HttpRequest, **kwargs):
+        try:
+            response = func(request, **kwargs)
+            status_code = response.status_code
+            __log_event(request, status_code)
+            return response
+        except Exception as e:
+            raise e
+    return wrapper

@@ -6,7 +6,7 @@ services:
     ports:
       - 8000:8000
     environment:
-      APP_FRONTEND_HOST: http://localhost:4173 # for local development CORS config
+      APP_FRONTEND_HOST: localhost:4173 # for local development CORS config
       APP_USE_MYSQL: 1
       APP_MYSQL_HOST: mysql
       APP_MYSQL_USER: root

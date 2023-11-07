@@ -1,17 +1,16 @@
-from django.http import HttpRequest, HttpResponse, FileResponse
+from django.http import HttpRequest, HttpResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import IntegrityError
+from django.db.models import Max
 
 
 from .apps import bmgt435_file_system
 from .simulation.Cases import FoodCenter, SimulationException
 from .bmgtModels import *
-from django.db.models import Max
-import bmgt435_elp.bmgtAnalyticsModel as bmgtAnalyticsModel
 from .utils.statusCode import Status
 from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulation_result
-from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params
+from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, logger
 
 import pandas as pd
 import json
@@ -551,7 +550,7 @@ class FeedbackApi:
             user:BMGTUser = request.bmgt_user
             content = data.get('content')
             if content:
-                feedback = bmgtAnalyticsModel.BMGTFeedback(user=user, content=content)
+                feedback = BMGTFeedback(user=user, content=content)
                 feedback.save()
                 resp.status_code = Status.OK
                 resp.write("Feedback submitted!")
@@ -568,4 +567,4 @@ class FeedbackApi:
     @require_GET
     @staticmethod
     def feedback_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_query(bmgtAnalyticsModel.BMGTFeedback, pager_params_from_request(request))
+        return generic_paginated_query(BMGTFeedback, pager_params_from_request(request))

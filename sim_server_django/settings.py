@@ -1,5 +1,5 @@
 from pathlib import Path
-from .config import Config
+from .config import AppConfig
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -9,16 +9,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-7+pi0)&orq-c)01-0vt$^=^jhs-m$)t3b7h-sx!i+#)lwbs^u5'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = Config.APP_DEBUG
+DEBUG = AppConfig.APP_DEBUG
 if DEBUG:
     print('Base dir is \t', BASE_DIR)
 
 
-ALLOWED_HOSTS = ['app', 'localhost', Config.APP_FRONTEND_HOST]
+ALLOWED_HOSTS = ['app', 'localhost', AppConfig.APP_FRONTEND_HOST]
 
 CSRF_TRUSTED_ORIGINS = [
- 'http://localhost', f'http://{Config.APP_FRONTEND_HOST}',
-"https://localhost", f"https://{Config.APP_FRONTEND_HOST}"
+ 'http://localhost', f'http://{AppConfig.APP_FRONTEND_HOST}',
+"https://localhost", f"https://{AppConfig.APP_FRONTEND_HOST}"
 ]
 
 
@@ -34,8 +34,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'bmgt435_elp.middlewares.bgmt435Middlewares.CORSMiddleware',
-    'bmgt435_elp.middlewares.bgmt435Middlewares.AuthenticationMiddleware',
+    'bmgt435_elp.middlewares.CORSMiddleware',
+    'bmgt435_elp.middlewares.AuthenticationMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -72,20 +72,20 @@ ASGI_APPLICATION = 'sim_server_django.asgi.application'
 
 # DATABASE_ROUTERS = ['bmgt435_elp.utils.databaseUtils.BMGT435_DB_Router', ]
 
-if Config.APP_USE_MYSQL:
+if AppConfig.APP_USE_MYSQL:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': Config.APP_MYSQL_DB,
-            "HOST":Config.APP_MYSQL_HOST,
-            "PORT":Config.APP_MYSQL_PORT,
-            "USER":Config.APP_MYSQL_USER,
-            "PASSWORD":Config.APP_MYSQL_PASSWORD,
+            'NAME': AppConfig.APP_MYSQL_DB,
+            "HOST":AppConfig.APP_MYSQL_HOST,
+            "PORT":AppConfig.APP_MYSQL_PORT,
+            "USER":AppConfig.APP_MYSQL_USER,
+            "PASSWORD":AppConfig.APP_MYSQL_PASSWORD,
             'MYSQL': {
                 'driver': 'pymysql',
                 'charset': 'utf8mb4',
             },
-        }
+        },
     }
 else:
     DATABASES = {

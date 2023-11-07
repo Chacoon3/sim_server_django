@@ -1,12 +1,12 @@
-from ..utils.statusCode import Status
+from .utils.statusCode import Status
 from django.http import HttpRequest, HttpResponse
 import os
-from ..bmgtModels import BMGTUser
+from .bmgtModels import BMGTUser
 
 
 def CORSMiddleware(get_response):
 
-    origin = os.environ.get("BMGT435_INDEX")
+    origin = os.environ.get("APP_FRONTEND_HOST")
 
     def config_cors_response(resp: HttpResponse):
         resp["Access-Control-Allow-Origin"] = origin

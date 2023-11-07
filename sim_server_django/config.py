@@ -2,8 +2,10 @@
 import os
 
 
-
-class Config:
+class AppConfig:
+    """
+    application configuration
+    """
 
     APP_DEBUG = os.environ.get("APP_DEBUG", True)
 
