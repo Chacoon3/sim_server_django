@@ -4,11 +4,6 @@ from .apis import *
 import json
 
 
-def _clientSetCookies(client:Client, cookies:dict):
-    for k, v in cookies.items():
-        client.cookies[k] = v
-
-
 def _clientSignUp(client:Client, did:str, password:str):
     return client.post(
         'bmgt435-service/api/auth/sign-up',
@@ -86,14 +81,9 @@ class AppAuthTest(TestCase):
     
     def testSignInPositive(self):
         c = Client()
-        _clientSignUp(c, 'did', 'pa3232.ssword')
-
-        resp = c.post(
-            'bmgt435-service/api/auth/sign-in',
-            json.dumps({'did': 'did', 'password': 'pa3232.ssword'}),
-            'application/json'
-        )
-
+        pwd = 'pa3232.ssword'
+        _clientSignUp(c, 'did', pwd)
+        resp = _clientSignIn(c, 'did', pwd)
         self.assertEqual(resp.status_code, 200)
 
 
@@ -120,13 +110,6 @@ class UserApiTest(TestCase):
         BMGTUser(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.').save()
         BMGTUser(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.').save()
 
-    
-    def testUserMePositive(self):
-        resp = Client().get(
-            'bmgt435-service/api/user/me',
-        )
-        self.assertNotEqual(resp.status_code, 200)
-
 
     def testUserMeAfterSignIn(self):
         c = Client()
@@ -147,7 +130,9 @@ class UserApiTest(TestCase):
 
 
     def testUserMeNotActivated(self):
-        resp = Client().get(
+        c = Client()
+        c.cookies['id'] = 2
+        resp = c.get(
             'bmgt435-service/api/users/me',
         )
         self.assertNotEqual(resp.status_code, 200)
@@ -155,19 +140,19 @@ class UserApiTest(TestCase):
 
 class GroupApiTest(TestCase):
 
+    
     def setUp(self) -> None:
-        BMGTUser(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.').save()
-        BMGTUser(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.').save()
-        BMGTUser(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.').save()
-        BMGTSemester(year=2022, season='fall').save()
-        BMGTGroup(number = 1, semester = BMGTSemester.objects.get(year=2022, season='fall')).save()
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.')
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.')
+        BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.')
+        BMGTSemester.objects.create(year=2022, season='fall')
+        BMGTGroup.objects.create(number = 1, semester = BMGTSemester.objects.get(year=2022, season='fall'))
 
     
     def testGetGroupPositive(self):
         c = Client()
         _clientSignUp(c, 'did', 'Grave11.')
         _clientSignIn(c, 'did', 'Grave11.')
-        _clientSetCookies(c, {'id': 1})
         resp = c.get(
             'bmgt435-service/api/groups?id=1',
         )

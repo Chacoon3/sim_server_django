@@ -46,6 +46,7 @@ def AuthenticationMiddleware(get_response):
         2. user utility api's are allowed if there is a user id cookie
         3. manage api's are allowed if there is a user id cookie, and if the user is an admin (validated by a database query)
         """
+
         # no authentication required
         if request.path.startswith("/bmgt435-service/api/auth/") or request.path.startswith("/bmgt435-service/admin") or request.path.startswith("/bmgt435-service/static"):
             return get_response(request)
