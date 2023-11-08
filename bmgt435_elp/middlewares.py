@@ -6,7 +6,7 @@ from .bmgtModels import BMGTUser
 
 def CORSMiddleware(get_response):
 
-    origin = os.environ.get("APP_FRONTEND_HOST")
+    origin = os.environ.get("APP_FRONTEND_HOST",)
 
     def config_cors_response(resp: HttpResponse):
         resp["Access-Control-Allow-Origin"] = origin
@@ -52,12 +52,12 @@ def AuthenticationMiddleware(get_response):
             return get_response(request)
 
         user_id = request.COOKIES.get('id', None)
-        if not user_id:
+        if user_id is None:
             resp = HttpResponse(status=Status.NOT_FOUND)
             resp.write("Failed to verify authentication!")
             return resp
         else:
-            user_query = BMGTUser.objects.filter(id=user_id, activated=1)
+            user_query = BMGTUser.objects.filter(id=user_id, activated=True)
             if user_query.exists():
                 user = user_query.get()
                 request.bmgt_user = user    # store the user info

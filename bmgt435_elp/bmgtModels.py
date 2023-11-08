@@ -99,9 +99,8 @@ class BMGTUser(BMGTModelBase):
     did = models.CharField(max_length=60, auto_created=False, null=False, unique=True, db_index=True)
     first_name = models.CharField(max_length=60, null=False)
     last_name = models.CharField(max_length=60, null=False)
-    # stores the password hash
-    password = models.CharField(max_length=100,  null=False, default="")
-    activated = models.IntegerField(choices=BinaryIntegerFlag.choices, default=BinaryIntegerFlag.FALSE, null=False,)
+    password = models.CharField(max_length=100,  null=False, default="")    # stores the password hash
+    activated = models.BooleanField(default=False,  null=False)
     role = models.CharField(choices=BMGTUserRole.choices, default=BMGTUserRole.USER, null=False, max_length=5)
     group = models.ForeignKey(BMGTGroup, on_delete=models.SET_NULL, null=True)
     semester = models.ForeignKey(BMGTSemester, on_delete=models.SET_NULL, null=True)  # allow null for admin

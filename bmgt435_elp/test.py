@@ -1,31 +1,59 @@
 from django.test import  TestCase, Client, RequestFactory
 from .bmgtModels import *
 from .apis import *
+from typing import Callable
 import json
 
 
-def _clientSignUp(client:Client, did:str, password:str):
-    return client.post(
-        'bmgt435-service/api/auth/sign-up',
-        json.dumps({'did': did, 'password': password}),
+def _signUp(did:str, password:str):
+    req = RequestFactory().post(
+        '/bmgt435-service/api/auth/sign-up',
+        json.dumps({'did':did, 'password':password}),
         'application/json'
     )
-
-
-def _clientSignIn(client:Client, did:str, password:str):
-    resp = client.post(
-        'bmgt435-service/api/auth/sign-in',
-        json.dumps({'did': did, 'password': password}),
-        'application/json'
-    )
+    resp = AuthApi.sign_up(req)
     return resp
 
 
-class AppAuthTest(TestCase):
+def _signIn(did:str, password:str):
+    req = RequestFactory().post(
+        '/bmgt435-service/api/auth/sign-in',
+        json.dumps({'did':did, 'password':password}),
+        'application/json'
+    )
+    resp = AuthApi.sign_in(req)
+    return resp
+
+
+def sendPost(url:str, method:Callable, data:dict, cookies:dict):
+    req = RequestFactory().post(
+        url,
+        json.dumps(data),
+        'application/json'
+    )
+    for key in cookies:
+        req.COOKIES[key] = cookies[key]
+    resp = method(req)
+    return resp
+
+
+def sendGet(url:str, method:Callable, cookies:dict):
+    req = RequestFactory().get(
+        url,
+    )
+    for key in cookies:
+        req.COOKIES[key] = cookies[key]
+    resp = method(req)
+    return resp
+
+
+class TestSignUp(TestCase):
 
     def setUp(self):
-        BMGTUser(first_name='first', last_name='last', did='did', role='admin').save()
-        BMGTUser(first_name='first321', last_name='last232', did='did232', role='user').save()
+        self.did = 'did'
+        self.password = 'pa3232.ssword'
+        BMGTUser.objects.create(first_name='first', last_name='last', did=self.did, role='admin')
+        BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user')
 
 
     def testQueryBmgtUser(self):
@@ -36,70 +64,44 @@ class AppAuthTest(TestCase):
 
 
     def testSignUpPositive(self):
-        client = Client()
-        resp = client.post(
-            '/bmgt435-service/api/auth/sign-up', 
-            json.dumps({'did': 'did', 'password': 'pa3232.ssword'}),
-            'application/json'
-        )
+        resp = _signUp(self.did, self.password)
+        user = BMGTUser.objects.get(did=self.did)
+        self.assertEqual(user.activated, True, 'user should be activated after sign up')
         self.assertEqual(resp.status_code, 200)
 
 
     def testSignUpNegative(self):
-        resp = Client().post(
-            '/bmgt435-service/api/auth/sign-up',
-            json.dumps({'did':'', 'password':""}),
-            'application/json'
-        )
+        resp = _signUp('', '')
         self.assertNotEqual(resp.status_code, 200)
+        assert not BMGTUser.objects.filter(did='').exists()
 
 
     def testSignUpNonExistentUser(self):
-        resp = Client().post(
-            '/bmgt435-service/api/auth/sign-up',
-            json.dumps({'did':'did323', 'password':"pass32132321.$"}),
-            'application/json'
-        )
+        resp = _signUp('did323', 'pass32132321.$')
         self.assertNotEqual(resp.status_code, 200)
 
 
     def testRepeatedSignUp(self):
-        client = Client()
-        resp = client.post(
-            '/bmgt435-service/api/auth/sign-up', 
-            json.dumps({'did': 'did', 'password': 'pa3232.ssword'}),
-            'application/json'
-        )
-        
-        resp= client.post(
-            '/bmgt435-service/api/auth/sign-up',
-            json.dumps({'did': 'did', 'password': 'pa3232.ssword'}),
-            'application/json'
-        )
-        self.assertNotEqual(resp.status_code, 200)
+        resp = _signUp(self.did, self.password)
+        self.assertEqual(resp.status_code, 200)
+        resp2= _signUp(self.did, self.password)
+        self.assertNotEqual(resp2.status_code, 200)
 
     
     def testSignInPositive(self):
-        c = Client()
-        pwd = 'pa3232.ssword'
-        _clientSignUp(c, 'did', pwd)
-        resp = _clientSignIn(c, 'did', pwd)
+        did = 'did232'
+        pwd = 'pa3232..ssword'
+        _signUp(did, pwd)
+        self.assertEqual(BMGTUser.objects.get(did=did).activated, True, 'user should be activated after sign up')
+        resp = _signIn(did, pwd)
         self.assertEqual(resp.status_code, 200)
 
 
     def testSignInNegative(self):
-        c = Client()
-        c.post(
-            'bmgt435-service/api/auth/sign-up',
-            json.dumps({'did':'did', 'password':'pa3232.ssword'}),
-            'application/json'
-        )
-
-        resp = c.post(
-            'bmg435-service/api/auth/sign-in',
-            json.dumps({'did':'did', 'password':'pa3232.ssw2ord'}),
-            'application/json'
-        )
+        did = 'did'
+        pwd = 'pa3232.ssword'
+        _signUp(did, pwd)
+        resp = _signIn(did, 'pa3232.ssword2')
         self.assertNotEqual(resp.status_code, 200)
 
 
@@ -112,13 +114,15 @@ class UserApiTest(TestCase):
 
 
     def testUserMeAfterSignIn(self):
-        c = Client()
-        _clientSignUp(c, 'did', 'Grave11.')
-        _clientSignIn(c, 'did', 'Grave11.')
+        _signUp( 'did', 'Grave11.')
+        _signIn('did', 'Grave11.')
         
-        resp = c.get(
+        req = RequestFactory().get(
             'bmgt435-service/api/users/me',
         )
+        req.COOKIES['id'] = 1
+
+        resp = UserApi.me(req)
         self.assertEqual(resp.status_code, 200)
 
 

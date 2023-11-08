@@ -11,7 +11,7 @@
       "program": "${workspaceFolder}\\manage.py",
       "args": ["runserver"],
       "env": {
-        "BMGT435_INDEX": "http://localhost:5173",  // for local testing
+        "APP_FRONTEND_HOST": "http://localhost:5173",  // for local testing
       },
       "django": true,
       "justMyCode": true

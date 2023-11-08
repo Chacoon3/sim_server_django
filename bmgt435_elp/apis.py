@@ -126,7 +126,7 @@ class UserApi:
         try:
             resp = HttpResponse()
             id = request.COOKIES.get('id', None)
-            user = BMGTUser.objects.get(id=id, activated=1, )
+            user = BMGTUser.objects.get(id=id, activated=True, )
             resp.write(serialize_model_instance(user))
             resp.status_code = Status.OK
         except BMGTUser.DoesNotExist:
@@ -453,7 +453,7 @@ class ManageApi:
         resp = HttpResponse()
 
         count_users = BMGTUser.objects.count()
-        count_active_users = BMGTUser.objects.filter(activated=1).count()
+        count_active_users = BMGTUser.objects.filter(activated=True).count()
         count_groups = BMGTGroup.objects.count()
         count_cases = BMGTCase.objects.count()
         count_case_records = BMGTCaseRecord.objects.count()

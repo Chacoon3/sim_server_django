@@ -14,7 +14,7 @@ if DEBUG:
     print('Base dir is \t', BASE_DIR)
 
 
-ALLOWED_HOSTS = ['app', 'localhost', AppConfig.APP_FRONTEND_HOST]
+ALLOWED_HOSTS = ['app', 'localhost', '127.0.0.1', AppConfig.APP_FRONTEND_HOST]
 
 CSRF_TRUSTED_ORIGINS = [
  'http://localhost', f'http://{AppConfig.APP_FRONTEND_HOST}',
