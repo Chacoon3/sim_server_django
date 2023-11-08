@@ -129,5 +129,3 @@ class GroupApiTest(TestCase):
         BMGTUser.objects.create(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.').save()
         BMGTUser.objects.create(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.').save()
         BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.').save()
-
-        BMGTGroup.objects.create()
