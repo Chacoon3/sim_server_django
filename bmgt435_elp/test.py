@@ -1,4 +1,4 @@
-from django.test import  TestCase, Client, RequestFactory
+from django.test import  TestCase, RequestFactory
 from .bmgtModels import *
 from .apis import *
 from typing import Callable
@@ -25,7 +25,7 @@ def _signIn(did:str, password:str):
     return resp
 
 
-def sendPost(url:str, method:Callable, data:dict, cookies:dict):
+def _sendPost(url:str, method:Callable, data, cookies:dict):
     req = RequestFactory().post(
         url,
         json.dumps(data),
@@ -37,7 +37,7 @@ def sendPost(url:str, method:Callable, data:dict, cookies:dict):
     return resp
 
 
-def sendGet(url:str, method:Callable, cookies:dict):
+def _sendGet(url:str, method:Callable, cookies:dict):
     req = RequestFactory().get(
         url,
     )
@@ -47,7 +47,7 @@ def sendGet(url:str, method:Callable, cookies:dict):
     return resp
 
 
-class TestSignUp(TestCase):
+class TestAuthApi(TestCase):
 
     def setUp(self):
         self.did = 'did'
@@ -105,7 +105,7 @@ class TestSignUp(TestCase):
         self.assertNotEqual(resp.status_code, 200)
 
 
-class UserApiTest(TestCase):
+class TestUserApi(TestCase):
 
     def setUp(self):
         BMGTUser(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.').save()
@@ -127,22 +127,16 @@ class UserApiTest(TestCase):
 
 
     def testUserMeNegative(self):
-        resp = Client().get(
-            'bmgt435-service/api/users/me',
-        )
+        resp = _sendGet('/bmgt435-service/api/users/me', UserApi.me, {})
         self.assertNotEqual(resp.status_code, 200)
 
 
     def testUserMeNotActivated(self):
-        c = Client()
-        c.cookies['id'] = 2
-        resp = c.get(
-            'bmgt435-service/api/users/me',
-        )
+        resp = _sendGet('/bmgt435-service/api/users/me', UserApi.me, {'id':-1})
         self.assertNotEqual(resp.status_code, 200)
 
 
-class GroupApiTest(TestCase):
+class TestGroupApi(TestCase):
 
     
     def setUp(self) -> None:
@@ -151,14 +145,15 @@ class GroupApiTest(TestCase):
         BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.')
         BMGTSemester.objects.create(year=2022, season='fall')
         BMGTGroup.objects.create(number = 1, semester = BMGTSemester.objects.get(year=2022, season='fall'))
+        self.cookies = {'id':1}
 
     
     def testGetGroupPositive(self):
-        c = RequestFactory()
-        c.cookies['id'] = 1
-        req = c.get(
-            'bmgt435-service/api/groups?id=1',
-        )
-        resp = GroupApi.get_group(req)
+        resp = _sendGet('/bmgt435-service/api/groups?id=1', GroupApi.get_group, self.cookies)
         self.assertEqual(resp.status_code, 200)
+
+    
+    def testGetGroupNegative(self):
+        resp = _sendGet('/bmgt435-service/api/groups?id=2', GroupApi.get_group, self.cookies)
+        self.assertEqual(resp.status_code, 404)
         
