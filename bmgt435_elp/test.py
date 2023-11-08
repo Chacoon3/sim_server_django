@@ -1,9 +1,7 @@
-from django.test import  TestCase
+from django.test import  TestCase, Client
 from .bmgtModels import *
 from .apis import *
-from django.contrib.auth.hashers import make_password, check_password
-from django.test import Client
-import json 
+import json
 
 
 class AppAuthTest(TestCase):
@@ -92,3 +90,44 @@ class AppAuthTest(TestCase):
             json.dumps({'did':'did', 'password':'pa3232.ssw2ord'}),
         )
         self.assertNotEqual(resp.status_code, 200)
+
+
+class UserApiTest(TestCase):
+
+    def setUp(self):
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.').save()
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.').save()
+        BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.').save()
+
+    
+    def userMePositive(self):
+        resp = Client().get(
+            'bmgt435-service/api/user/me',
+            json.dumps({'id':1})
+        )
+        self.assertEqual(resp.status_code, 200)
+
+
+    def userMeNegative(self):
+        resp = Client().get(
+            'bmgt435-service/api/user/me',
+            json.dumps({'id':-1})
+        )
+        self.assertNotEqual(resp.status_code, 200)
+
+
+    def userMeNotActivated(self):
+        resp = Client().get(
+            'bmgt435-service/api/user/me',
+            json.dumps({'id':2})
+        )
+        self.assertNotEqual(resp.status_code, 200)
+
+
+class GroupApiTest(TestCase):
+    def setUp(self) -> None:
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.').save()
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.').save()
+        BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.').save()
+
+        BMGTGroup.objects.create()
