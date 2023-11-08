@@ -1,4 +1,4 @@
-from django.test import  TestCase, Client
+from django.test import  TestCase, Client, RequestFactory
 from .bmgtModels import *
 from .apis import *
 import json
@@ -150,10 +150,11 @@ class GroupApiTest(TestCase):
 
     
     def testGetGroupPositive(self):
-        c = Client()
-        _clientSignUp(c, 'did', 'Grave11.')
-        _clientSignIn(c, 'did', 'Grave11.')
-        resp = c.get(
+        c = RequestFactory()
+        c.cookies['id'] = 1
+        req = c.get(
             'bmgt435-service/api/groups?id=1',
         )
+        resp = GroupApi.get_group(req)
         self.assertEqual(resp.status_code, 200)
+        
