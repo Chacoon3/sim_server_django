@@ -25,6 +25,11 @@ All requests have been verified to have valid user id except for those of the Au
 CASE_RECORD_PATH = bmgt435_file_system.base_location.__str__() + "case_records/"
 MAX_GROUP_SIZE = 4
 
+def _get_session_user(request: HttpRequest) -> BMGTUser:
+    id = request.COOKIES.get('id', None)
+    user = BMGTUser.objects.get(id=id, activated=True, )
+    return user
+
 
 class AuthApi:
 
@@ -125,8 +130,7 @@ class UserApi:
     def me(request: HttpRequest,) -> HttpResponse:
         try:
             resp = HttpResponse()
-            id = request.COOKIES.get('id', None)
-            user = BMGTUser.objects.get(id=id, activated=True, )
+            user = _get_session_user(request)
             resp.write(serialize_model_instance(user))
             resp.status_code = Status.OK
         except BMGTUser.DoesNotExist:
@@ -164,7 +168,7 @@ class GroupApi:
     @require_GET
     @staticmethod
     def groups_paginated(request: HttpRequest,) -> HttpResponse:
-        user: BMGTUser = request.bmgt_user     # display only groups in the same semester
+        user: BMGTUser = _get_session_user(request)
         params = pager_params_from_request(request)
         if user.role == BMGTUser.BMGTUserRole.USER: # normal user only see groups in the same semester
             params['semester'] = user.semester
@@ -177,9 +181,9 @@ class GroupApi:
     def join_group(request: HttpRequest) -> HttpResponse:
         try:
             resp = HttpResponse()
-            user: BMGTUser = request.bmgt_user
+            user: BMGTUser = _get_session_user(request)
             data = json.loads(request.body)
-            group_id = data.get('group_id')
+            group_id = data['group_id']
             if user.group == None:
                 if user.role == BMGTUser.BMGTUserRole.ADMIN:    # admin can join any group of any semester
                     group = BMGTGroup.objects.get(id=group_id)
@@ -210,7 +214,7 @@ class GroupApi:
     @staticmethod
     def leave_group(request: HttpRequest) -> HttpResponse:
         resp = HttpResponse()
-        user: BMGTUser = request.bmgt_user
+        user: BMGTUser = _get_session_user(request)
         if user.group != None:
             user.group = None
             user.save()
@@ -266,7 +270,7 @@ class CaseApi:
     def submit(request: HttpRequest) -> HttpResponse:
         try:
             resp = HttpResponse()
-            user: BMGTUser = request.bmgt_user
+            user: BMGTUser = _get_session_user(request)
             data = json.loads(request.body)
             case_id = int(data.get('case_id'))
             case_instance = BMGTCase.objects.get(id=case_id)
@@ -360,7 +364,7 @@ class CaseRecordApi:
     @require_GET
     @staticmethod
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
-        user:BMGTUser = request.bmgt_user
+        user: BMGTUser = _get_session_user(request)
         group = user.group
         if not group:
             resp = HttpResponse()
@@ -547,7 +551,7 @@ class FeedbackApi:
         try:
             resp = HttpResponse()
             data = json.loads(request.body)
-            user:BMGTUser = request.bmgt_user
+            user: BMGTUser = _get_session_user(request)
             content = data.get('content')
             if content:
                 feedback = BMGTFeedback(user=user, content=content)

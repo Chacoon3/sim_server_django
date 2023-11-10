@@ -1,6 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, ValidationError
 from django.db import IntegrityError
-from django.core.paginator import Paginator
+from django.core.paginator import Paginator, EmptyPage
 from django.http import HttpRequest, HttpResponse
 from django.conf import settings
 from .statusCode import Status
@@ -139,20 +139,26 @@ def generic_paginated_query(cls, pager_params, **kwargs) -> HttpResponse:
     pass in a model class and a request object    
     kwargs: filter conditions
     """
-    resp = HttpResponse()
+    try:
+        resp = HttpResponse()
 
-    obj_set = cls.objects.filter(**kwargs)
-    obj_set = obj_set.order_by(
-        pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
-    pager = Paginator(obj_set, pager_params['size'])
+        obj_set = cls.objects.filter(**kwargs)
+        obj_set = obj_set.order_by(
+            pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
+        pager = Paginator(obj_set, pager_params['size'])
 
-    if pager_params['page'] > pager.num_pages:
-        resp.write("Page not found!")
-        resp.status_code = Status.NOT_FOUND
-    else:
-        resp.write(serialize_paginated_data(pager, pager_params['page']))
-        resp.status_code = Status.OK
-    return resp
+        if pager_params['page'] > pager.num_pages:
+            resp.write("Page not found!")
+            resp.status_code = Status.NOT_FOUND
+        else:
+            resp.write(serialize_paginated_data(pager, pager_params['page']))
+            resp.status_code = Status.OK
+        
+        return resp
+    except EmptyPage:
+        resp.status_code = Status.BAD_REQUEST
+        return resp
+
 
 
 def __log_event(request: HttpRequest, status_code: int):

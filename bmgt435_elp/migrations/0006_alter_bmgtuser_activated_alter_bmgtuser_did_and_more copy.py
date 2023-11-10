@@ -20,7 +20,4 @@ class Migration(migrations.Migration):
             name='did',
             field=models.CharField(db_index=True, max_length=60, unique=True),
         ),
-        migrations.DeleteModel(
-            name='BMGTSession',
-        ),
     ]

@@ -70,7 +70,7 @@ class BMGTSemester(BMGTModelBase):
 class BMGTGroup(BMGTModelBase):
 
     number = models.IntegerField(null=False, unique=False)  # group number
-    semester = models.ForeignKey(BMGTSemester, on_delete=models.SET_NULL, null=True)
+    semester = models.ForeignKey(BMGTSemester, on_delete=models.CASCADE, null=False)
 
     @property
     def users(self) -> QuerySet:

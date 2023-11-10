@@ -37,10 +37,12 @@ def _sendPost(url:str, method:Callable, data, cookies:dict):
     return resp
 
 
-def _sendGet(url:str, method:Callable, cookies:dict):
+def _sendGet(url:str, method:Callable, cookies:dict, getParams:dict = None):
     req = RequestFactory().get(
         url,
     )
+    if getParams:
+        req.GET = getParams
     for key in cookies:
         req.COOKIES[key] = cookies[key]
     resp = method(req)
@@ -146,6 +148,15 @@ class TestGroupApi(TestCase):
         BMGTSemester.objects.create(year=2022, season='fall')
         BMGTGroup.objects.create(number = 1, semester = BMGTSemester.objects.get(year=2022, season='fall'))
         self.cookies = {'id':1}
+        self.paginatedParams = {'page':1, 'size':10}
+
+    
+    def testGroupIntegrity(self):
+        try:
+            BMGTGroup(number=1).save()
+            self.fail('should assign valid semester when creating groups')
+        except IntegrityError:
+            return
 
     
     def testGetGroupPositive(self):
@@ -156,4 +167,32 @@ class TestGroupApi(TestCase):
     def testGetGroupNegative(self):
         resp = _sendGet('/bmgt435-service/api/groups?id=2', GroupApi.get_group, self.cookies)
         self.assertEqual(resp.status_code, 404)
+
+
+    def testGetGroupPaginated(self):
+        resp = _sendGet('/bmgt435-service/api/groups/paginated', GroupApi.groups_paginated, self.cookies, self.paginatedParams)
+        self.assertEqual(resp.status_code, 200)
+
+
+    def testGetGroupPaginatedNeg(self):
+        params = self.paginatedParams
+        params['page'] = -1
+        resp = _sendGet('/bmgt435-service/api/groups/paginated', GroupApi.groups_paginated, self.cookies, self.paginatedParams)
+        self.assertEqual(resp.status_code, 400)
+
+        params['page'] = 100
+        resp = _sendGet('/bmgt435-service/api/groups/paginated', GroupApi.groups_paginated, self.cookies, self.paginatedParams)
+        self.assertEqual(resp.status_code, 404)
         
+
+    def testJoinGroup(self):
+        resp = _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'group_id':1}, self.cookies)
+        self.assertEqual(resp.status_code, 200)
+
+
+    def testJoinGroupNeg(self):
+        resp = _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'group_id':-1}, self.cookies)
+        self.assertEqual(resp.status_code, 404)
+
+        resp = _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'groupid':1}, self.cookies)
+        self.assertEqual(resp.status_code, 400)
