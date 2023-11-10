@@ -185,9 +185,18 @@ class TestGroupApi(TestCase):
         self.assertEqual(resp.status_code, 404)
         
 
-    def testJoinGroup(self):
+    def testGroupSuitePos(self):
+        # join
         resp = _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'group_id':1}, self.cookies)
         self.assertEqual(resp.status_code, 200)
+        self.assertEqual(BMGTGroup.objects.get(id=1).users.count(), 1, 'join group failed')
+        self.assertEqual(BMGTUser.objects.get(id=1).group_id, 1, 'join group failed')
+
+        # leave
+        resp = _sendPost('/bmgt435-service/api/groups/leave', GroupApi.leave_group, {'group_id':1}, self.cookies)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(BMGTGroup.objects.get(id=1).users.count(), 0, 'leave group failed')
+        self.assertEqual(BMGTUser.objects.get(id=1).group_id, None, 'leave group failed')
 
 
     def testJoinGroupNeg(self):
