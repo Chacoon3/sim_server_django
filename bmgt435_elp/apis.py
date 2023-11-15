@@ -4,13 +4,12 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.db import IntegrityError
 from django.db.models import Max
 
-
 from .apps import bmgt435_file_system
 from .simulation.Cases import FoodCenter, SimulationException
 from .bmgtModels import *
 from .utils.statusCode import Status
 from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulation_result
-from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, logger
+from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
 
 import pandas as pd
 import json
@@ -26,8 +25,12 @@ CASE_RECORD_PATH = bmgt435_file_system.base_location.__str__() + "case_records/"
 MAX_GROUP_SIZE = 4
 
 def _get_session_user(request: HttpRequest) -> BMGTUser:
+    """
+    raise key error if cookie not found
+    raise does not exist error if user not found
+    """
     id = request.COOKIES.get('id', None)
-    user = BMGTUser.objects.get(id=id, activated=True, )
+    user = BMGTUser.objects.get(id=id, activated=True,)
     return user
 
 
@@ -35,8 +38,7 @@ class AuthApi:
 
     @staticmethod
     def __set_auth_cookie(response: HttpResponse, user: BMGTUser) -> None:
-        response.set_cookie('id', str(user.id),
-                            samesite='strict', secure=True, httponly=True)
+        response.set_cookie('id', str(user.id), samesite='strict', secure=True, httponly=True)
 
     @staticmethod
     def __clear_auth_cookie(response: HttpResponse) -> None:
@@ -45,27 +47,23 @@ class AuthApi:
     @request_error_handler
     @require_POST
     @staticmethod
-    def sign_in(request: HttpRequest) -> HttpResponse:
+    def sign_in(request: HttpRequest) -> AppResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             data = json.loads(request.body)
             did = data['did']
             password = data['password']
             user = BMGTUser.objects.get(did=did, activated=True,)
             if check_password(password, user.password):
-                resp.status_code = Status.OK
                 AuthApi.__set_auth_cookie(resp, user)
-                resp.write(serialize_model_instance(user))
+                resp.resolve(serialize_model_instance(user))
             else:
-                resp.status_code = Status.UNAUTHORIZED
-                resp.write("Sign in failed. Please check your directory ID and password!")
+                resp.reject("Sign in failed. Please check your directory ID and password!")
         except BMGTUser.DoesNotExist:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("Sign in failed. Please check your directory ID!")
+            resp.reject("Sign in failed. Please check your directory ID!")
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Sign in failed. Invalid data format!")
-
+            resp.reject("Sign in failed. Invalid data format!")
+        
         return resp
 
     @staticmethod
@@ -75,32 +73,27 @@ class AuthApi:
     @request_error_handler
     @require_POST
     @staticmethod
-    def sign_up(request: HttpRequest) -> HttpResponse:
+    def sign_up(request: HttpRequest) -> AppResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             data = json.loads(request.body)
             did = data['did']
             password = data['password']
             user = BMGTUser.objects.get(did=did,)
             if user.activated:
-                resp.status_code = Status.BAD_REQUEST
-                resp.write("Sign up failed. User already exists!")
+                resp.reject("Sign up failed. User already activated!")
             else:
                 if password_valid(password):
                     user.password = make_password(password)
                     user.activated = True
                     user.save()
-                    resp.status_code = Status.OK
-                    resp.write("Sign up success!")
+                    resp.resolve("Sign up success!")
                 else:
-                    resp.status_code = Status.BAD_REQUEST
-                    resp.write("Sign up failed! Password should contain at least 8 and up to 20 alphanumeric characters!")
+                    resp.reject("Sign up failed! Password should contain at least 8 and up to 20 alphanumeric characters!")
         except BMGTUser.DoesNotExist:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("Sign up failed. Please check your directory ID!")
+            resp.reject("Sign up failed. Please check your directory ID!")
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Sign up failed. Invalid data format!")
+            resp.reject("Sign up failed. Invalid data format!")
 
         return resp
 
@@ -116,9 +109,14 @@ class AuthApi:
     @require_POST
     @staticmethod
     def sign_out(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        AuthApi.__clear_auth_cookie(resp)
-        resp.status_code = Status.OK
+        try:
+            resp = AppResponse()
+            user = _get_session_user(request)
+            resp.resolve("Sign out success!")
+            AuthApi.__clear_auth_cookie(resp)
+        except (BMGTUser.DoesNotExist, KeyError) as e:
+            resp.reject("User not found!")
+
         return resp
 
 
@@ -129,16 +127,13 @@ class UserApi:
     @staticmethod
     def me(request: HttpRequest,) -> HttpResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             user = _get_session_user(request)
-            resp.write(serialize_model_instance(user))
-            resp.status_code = Status.OK
+            resp.resolve(serialize_model_instance(user))
         except BMGTUser.DoesNotExist:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("User not found!")
+            resp.reject("User not found!")
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format!")
+            resp.reject("Invalid data format!")
 
         return resp
 
@@ -148,19 +143,16 @@ class GroupApi:
     @request_error_handler
     @require_GET
     @staticmethod
-    def get_group(request: HttpRequest) -> HttpResponse:
+    def get_group(request: HttpRequest) -> AppResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             group_id = int(request.GET.get('id'))
             group = BMGTGroup.objects.get(id=group_id)
-            resp.write(serialize_model_instance(group))
-            resp.status_code = Status.OK
+            resp.resolve(serialize_model_instance(group))
         except BMGTGroup.DoesNotExist:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("Group not found!")
+            resp.reject("Group not found!")
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format!")
+            resp.reject("Invalid data format!")
 
         return resp
 
@@ -180,7 +172,8 @@ class GroupApi:
     @staticmethod
     def join_group(request: HttpRequest) -> HttpResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
+
             user: BMGTUser = _get_session_user(request)
             data = json.loads(request.body)
             group_id = data['group_id']
@@ -192,20 +185,15 @@ class GroupApi:
                 if group.users.count() < MAX_GROUP_SIZE:
                     user.group = group
                     user.save()
-                    resp.write(serialize_model_instance(group))
-                    resp.status_code = Status.OK
+                    resp.resolve(serialize_model_instance(group))
                 else:
-                    resp.write("Group already full!")
-                    resp.status_code = Status.NOT_FOUND
+                    resp.reject("Group already full!")
             else:
-                resp.write("Cannot join another group while you are alreay in a group!")
-                resp.status_code = Status.BAD_REQUEST
+                resp.reject("Cannot join another group while you are alreay in a group!")
         except BMGTGroup.DoesNotExist:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("Group not found!")
+            resp.reject("Group not found!")
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format!")
+            resp.reject("Invalid data format!")
 
         return resp
 
@@ -213,16 +201,14 @@ class GroupApi:
     @require_POST
     @staticmethod
     def leave_group(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
+        resp = AppResponse()
         user: BMGTUser = _get_session_user(request)
         if user.group != None:
             user.group = None
             user.save()
-            resp.write("Group left!")
-            resp.status_code = Status.OK
+            resp.resolve("Group left!")
         else:
-            resp.write("You are not in a group!")
-            resp.status_code = Status.BAD_REQUEST
+            resp.resolve("You are not in a group!")
 
         return resp
 
@@ -242,17 +228,14 @@ class CaseApi:
     @staticmethod
     def get(request: HttpRequest) -> HttpResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             case_id = request.GET.get('case_id', None)
             case = BMGTCase.objects.get( id=case_id, visible=True)
-            resp.write(serialize_model_instance(case))
-            resp.status_code = Status.OK
+            resp.resolve(serialize_model_instance(case))
         except BMGTCase.DoesNotExist:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("Case not found!")
+            resp.reject("Case not found!")
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format!")
+            resp.reject("Invalid data format!")
             
         return resp
     
@@ -269,7 +252,7 @@ class CaseApi:
     @staticmethod
     def submit(request: HttpRequest) -> HttpResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             user: BMGTUser = _get_session_user(request)
             data = json.loads(request.body)
             case_id = int(data.get('case_id'))
@@ -297,33 +280,26 @@ class CaseApi:
                             case_record.state = BMGTCaseRecord.State.SUCCESS
                             case_record.score = res.score
                             case_record.save()
-                            resp.write(json.dumps({
+                            resp.resolve(json.dumps({
                                         "case_record_id": case_record.id,
                                         "summary": case_record.summary_dict,
                                         "file_url": case_record.file_url,
                                     }))
-                            resp.status_code = Status.OK
                         case _:
-                            resp.write("Case not found!")
-                            resp.status_code = Status.NOT_FOUND
+                            resp.reject("Case not found!")
                 else:
-                    resp.write(
+                    resp.reject(
                             "You have reached the maximum submission for this case!")
-                    resp.status_code = Status.BAD_REQUEST
             else:
-                resp.write(
+                resp.reject(
                     "You must join a group first to run the simulation!")
-                resp.status_code = Status.BAD_REQUEST
 
         except BMGTCase.DoesNotExist:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("Case not found!")
+            resp.reject("Case not found!")
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format!")
+            resp.reject("Invalid data format!")
         except SimulationException as e:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(f"Simulation failed!{e.args[0]}")
+            resp.reject(f"Simulation failed!{e.args[0]}")
             
         return resp
 
@@ -333,17 +309,14 @@ class CaseRecordApi:
     @staticmethod
     def get_case_record(request: HttpRequest) -> HttpResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             case_record_id = request.GET.get('id', None)
             case_record = BMGTCaseRecord.objects.get(id=case_record_id, )
-            resp.write(serialize_model_instance(case_record))
-            resp.status_code = Status.OK
+            resp.resolve(serialize_model_instance(case_record))
         except BMGTCaseRecord.DoesNotExist:
-            resp.status_code = Status.NOT_FOUND
-            resp.write("Case record not found!")
+            resp.reject("Case record not found!")
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format!")
+            resp.reject("Invalid data format!")
 
         return resp
 
@@ -366,18 +339,14 @@ class CaseRecordApi:
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
         user: BMGTUser = _get_session_user(request)
         group = user.group
-        if not group:
-            resp = HttpResponse()
-            resp.status_code = Status.NOT_FOUND
-            return resp
-        else:
-            return generic_paginated_query(BMGTCaseRecord, pager_params_from_request(request), state=BMGTCaseRecord.State.SUCCESS, group_id=group)
+        pagerParams = pager_params_from_request(request)
+        return generic_paginated_query(BMGTCaseRecord, pagerParams, state=BMGTCaseRecord.State.SUCCESS, group_id=group)
 
     @request_error_handler
     @require_GET
     def leader_board_paginated(request: HttpRequest) -> HttpResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             case_id = int(request.GET.get('case_id'))
             match case_id:
                 case 1:
@@ -390,11 +359,11 @@ class CaseRecordApi:
                         case_id=case_id)
 
                 case _:
-                    resp.write("Case not found!")
-                    resp.status_code = Status.NOT_FOUND
+                    raise BMGTCase.DoesNotExist
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format!")
+            resp.reject("Invalid data format!")
+        except BMGTCase.DoesNotExist:
+            resp.reject("Case not found!")
 
         return resp
 
@@ -406,7 +375,7 @@ class ManageApi:
     @staticmethod
     def import_users(request: HttpRequest, semester_id) -> HttpResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             semester = BMGTSemester.objects.get(id=semester_id)
             with io.BytesIO(request.body) as file:
                 raw_csv = pd.read_csv(file, encoding='utf-8')
@@ -420,14 +389,11 @@ class ManageApi:
                                 for row in user_csv.to_dict('records')]
 
                     BMGTUser.objects.bulk_create(obj_set, batch_size=40)
-                    resp.status_code = Status.OK
-                    resp.write("Imported!")
+                    resp.resolve("Imported!")
                 else:
-                    resp.status_code = Status.BAD_REQUEST
-                    resp.write("Import failed! Please upload a CSV file that contains the following columns: user_first_name, user_last_name, directory_id")
+                    resp.reject("Import failed! Please upload a CSV file that contains the following columns: user_first_name, user_last_name, directory_id")
         except IntegrityError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Import failed! Please remove the duplicated directory ID's from the CSV file!")
+            resp.reject("Import failed! Please remove the duplicated directory ID's from the CSV file!")
         
         return resp
 
@@ -454,7 +420,7 @@ class ManageApi:
     @require_GET
     @staticmethod
     def system_status(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
+        resp = AppResponse()
 
         count_users = BMGTUser.objects.count()
         count_active_users = BMGTUser.objects.filter(activated=True).count()
@@ -463,7 +429,7 @@ class ManageApi:
         count_case_records = BMGTCaseRecord.objects.count()
         count_case_records_success = BMGTCaseRecord.objects.filter(state=BMGTCaseRecord.State.SUCCESS).count()
 
-        resp.write(json.dumps({
+        resp.resolve(json.dumps({
             "count_users": count_users,
             "count_active_users": count_active_users,
             "count_groups": count_groups,
@@ -472,7 +438,6 @@ class ManageApi:
             "count_case_records_success": count_case_records_success,
         }))
 
-        resp.status_code = Status.OK
         return resp
     
 
@@ -480,18 +445,16 @@ class ManageApi:
     @require_POST
     @staticmethod
     def create_semester(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
+        resp = AppResponse()
         data = json.loads(request.body)
         year = data.get('year', None)
         season = data.get('season', None)
         if BMGTSemester.objects.filter(year=year, season=season).exists():
-            resp.write("Semester already exists!")
-            resp.status_code = Status.BAD_REQUEST
+            resp.reject("Semester already exists!")
         else:
             semester = BMGTSemester.objects.create(year=year, season=season)
             semester.save()
-            resp.write(serialize_model_instance(semester))
-            resp.status_code = Status.OK
+            resp.resolve(serialize_model_instance(semester))
         return resp
     
     
@@ -499,22 +462,30 @@ class ManageApi:
     @require_POST
     @staticmethod
     def delete_semester(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        data = json.loads(request.body)
-        semester_id = data.get('semester_id', None)
-        semester = BMGTSemester.objects.get(id=semester_id)
-        semester.delete()
-        resp.status_code = Status.OK
+        try:
+            resp = AppResponse()
+            data = json.loads(request.body)
+            semester_id = data.get('semester_id', None)
+            semester = BMGTSemester.objects.get(id=semester_id)
+            semester.delete()
+            resp.resolve("Semester deleted!")
+        except BMGTSemester.DoesNotExist:
+            resp.reject("Semester not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
         return resp
     
     @request_error_handler
     @require_GET
     @staticmethod
     def get_semesters(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        semesters = BMGTSemester.objects.all()
-        resp.write(serialize_models(semesters))
-        resp.status_code = Status.OK
+        try:
+            resp = AppResponse()
+            semesters = BMGTSemester.objects.all()
+            resp.resolve(serialize_models(semesters))
+        except Exception as e:
+            resp.reject(e)
+
         return resp
     
 
@@ -522,16 +493,24 @@ class ManageApi:
     @require_POST
     @staticmethod
     def batch_create_group(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-        data = json.loads(request.body)
-        semester_id = data.get('semester_id', None)
-        size = int(data.get('size'))
-        semester = BMGTSemester.objects.get(id=semester_id)
-        max_group_num = BMGTGroup.objects.aggregate(max_value=Max('number'))['max_value'] or 0
-        BMGTGroup.objects.bulk_create(
-            [BMGTGroup(number=max_group_num + i + 1, semester=semester) for i in range(size)]
-        )
-        resp.status_code = Status.OK
+        try:
+            resp = AppResponse()
+            data = json.loads(request.body)
+            semester_id = data.get('semester_id', None)
+            size = int(data.get('size'))
+            semester = BMGTSemester.objects.get(id=semester_id)
+            max_group_num = BMGTGroup.objects.aggregate(max_value=Max('number'))['max_value'] or 0
+            BMGTGroup.objects.bulk_create(
+                [BMGTGroup(number=max_group_num + i + 1, semester=semester) for i in range(size)]
+            )
+            resp.resolve("Groups created!")
+        except BMGTSemester.DoesNotExist:
+            resp.reject("Semester not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+        except Exception as e:
+            resp.reject(e)
+        
         return resp
     
 
@@ -549,21 +528,20 @@ class FeedbackApi:
     @staticmethod
     def post(request: HttpRequest) -> HttpResponse:
         try:
-            resp = HttpResponse()
+            resp = AppResponse()
             data = json.loads(request.body)
             user: BMGTUser = _get_session_user(request)
             content = data.get('content')
             if content:
                 feedback = BMGTFeedback(user=user, content=content)
                 feedback.save()
-                resp.status_code = Status.OK
-                resp.write("Feedback submitted!")
+                resp.resolve("Feedback submitted!")
             else:
-                resp.status_code = Status.BAD_REQUEST
-                resp.write("Feedback cannot be empty!")  
+                resp.reject("Feedback cannot be empty!")  
         except KeyError:
-            resp.status_code = Status.BAD_REQUEST
-            resp.write("Invalid data format!")
+            resp.reject("Invalid data format!")
+        except Exception as e:
+            resp.reject(e)
         
         return resp
     

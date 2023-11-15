@@ -21,7 +21,6 @@ class CustomJSONEncoder(json.JSONEncoder):
             return super().default(obj)
 
 
-
 def serialize_models(querySet:QuerySet | list[BMGTModelBase]) -> str:
     return json.dumps([model.as_dictionary() for model in querySet], cls=CustomJSONEncoder)
 

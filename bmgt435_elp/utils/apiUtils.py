@@ -2,9 +2,8 @@ from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, 
 from django.db import IntegrityError
 from django.core.paginator import Paginator, EmptyPage
 from django.http import HttpRequest, HttpResponse
-from django.conf import settings
 from .statusCode import Status
-from .jsonUtils import serialize_paginated_data, serialize_models
+from .jsonUtils import serialize_paginated_data, serialize_models, CustomJSONEncoder
 from ..simulation.Cases import SimulationException
 from ..bmgtModels import BMGTTransaction
 
@@ -133,32 +132,29 @@ def pager_params_from_request(request: HttpRequest) -> dict:
     return params
 
 
-def generic_paginated_query(cls, pager_params, **kwargs) -> HttpResponse:
+def generic_paginated_query(dbModel, pager_params, **kwargs) -> HttpResponse:
     """
     generic paginated query on one table
     pass in a model class and a request object    
     kwargs: filter conditions
     """
     try:
-        resp = HttpResponse()
+        resp = AppResponse()
 
-        obj_set = cls.objects.filter(**kwargs)
+        obj_set = dbModel.objects.filter(**kwargs)
         obj_set = obj_set.order_by(
             pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
         pager = Paginator(obj_set, pager_params['size'])
 
-        if pager_params['page'] > pager.num_pages:
-            resp.write("Page not found!")
-            resp.status_code = Status.NOT_FOUND
+        if pager_params['page'] > pager.num_pages or pager_params['page'] < 1:
+            resp.reject("Page not found!")
         else:
-            resp.write(serialize_paginated_data(pager, pager_params['page']))
-            resp.status_code = Status.OK
+            resp.resolve(serialize_paginated_data(pager, pager_params['page']))
         
-        return resp
     except EmptyPage:
-        resp.status_code = Status.BAD_REQUEST
-        return resp
+        resp.reject("Page empty!")
 
+    return resp
 
 
 def __log_event(request: HttpRequest, status_code: int):
@@ -184,3 +180,24 @@ def logger(func):
         except Exception as e:
             raise e
     return wrapper
+
+
+class AppResponse(HttpResponse):
+    def __init__(self, status: int = Status.OK) -> None:
+        super().__init__(status=status)
+        self.resolver = None
+        self.rejector = None
+
+    def reject(self, error_msg: str):
+        self.flush()
+        self.write(json.dumps({
+            'error_msg': error_msg
+        }, cls=CustomJSONEncoder
+        ))
+
+    def resolve(self, data_resolver):
+        self.flush()
+        self.write(json.dumps({
+            'resolver': data_resolver
+        }, cls=CustomJSONEncoder
+        ))

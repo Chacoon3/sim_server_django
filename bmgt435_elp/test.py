@@ -49,7 +49,27 @@ def _sendGet(url:str, method:Callable, cookies:dict, getParams:dict = None):
     return resp
 
 
-class TestAuthApi(TestCase):
+def _getResponeData(resp:HttpResponse):
+    return json.loads(resp.content)
+
+
+class AppTestCaeBase(TestCase):
+
+    def _deserialize_resp_data(self, resp:HttpResponse) -> dict:
+        return json.loads(resp.content)
+
+
+    def assertResolved(self, resp:HttpResponse, msg=None):
+        data = self._deserialize_resp_data(resp)
+        self.assertTrue(data.get('resolver') is not None, msg)
+
+
+    def assertRejected(self, resp:HttpResponse, msg=None):
+        data = self._deserialize_resp_data(resp)
+        self.assertTrue(data.get('error_msg') is not None, msg)
+        
+
+class TestAuthApi(AppTestCaeBase):
 
     def setUp(self):
         self.did = 'did'
@@ -70,44 +90,81 @@ class TestAuthApi(TestCase):
         user = BMGTUser.objects.get(did=self.did)
         self.assertEqual(user.activated, True, 'user should be activated after sign up')
         self.assertEqual(resp.status_code, 200)
+        self.assertResolved(resp)
 
 
     def testSignUpNegative(self):
-        resp = _signUp('', '')
-        self.assertNotEqual(resp.status_code, 200)
+        resp = _signUp('23132', 'Grave2231312.')
+        self.assertEqual(resp.status_code, 200)
         assert not BMGTUser.objects.filter(did='').exists()
+        self.assertRejected(resp)
 
 
     def testSignUpNonExistentUser(self):
         resp = _signUp('did323', 'pass32132321.$')
-        self.assertNotEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 200)
+        self.assertRejected(resp)
 
 
     def testRepeatedSignUp(self):
         resp = _signUp(self.did, self.password)
-        self.assertEqual(resp.status_code, 200)
+        self.assertResolved(resp)
         resp2= _signUp(self.did, self.password)
-        self.assertNotEqual(resp2.status_code, 200)
+        self.assertRejected(resp2)
 
     
     def testSignInPositive(self):
         did = 'did232'
         pwd = 'pa3232..ssword'
         _signUp(did, pwd)
-        self.assertEqual(BMGTUser.objects.get(did=did).activated, True, 'user should be activated after sign up')
+        self.assertEqual(BMGTUser.objects.get(did=did).activated, True,)
         resp = _signIn(did, pwd)
-        self.assertEqual(resp.status_code, 200)
+        self.assertResolved(resp)
 
 
     def testSignInNegative(self):
         did = 'did'
         pwd = 'pa3232.ssword'
-        _signUp(did, pwd)
-        resp = _signIn(did, 'pa3232.ssword2')
-        self.assertNotEqual(resp.status_code, 200)
+        resp = _signUp(did, pwd)
+        self.assertResolved(resp)
+        resp2 = _signIn(did, 'pa3232.ssword2')
+        self.assertRejected(resp2)
 
 
-class TestUserApi(TestCase):
+    def testSignOutPositive(self):
+        did = 'did'
+        pwd = 'pa3232.ssword'
+        respSignUp = _signUp(did, pwd)
+        self.assertResolved(respSignUp)
+
+        respSignIn = _signIn(did, pwd)
+        self.assertResolved(respSignIn)
+
+        req = RequestFactory().post(
+            '/bmgt435-service/api/auth/sign-out',
+        )
+        req.COOKIES['id'] = 1
+        respSignOut = AuthApi.sign_out(req)
+        self.assertResolved(respSignOut)
+
+
+    def testSignOutNegative(self):
+        req = RequestFactory().post(
+            '/bmgt435-service/api/auth/sign-out',
+        )
+        req.COOKIES['id'] = -1
+        resp = AuthApi.sign_out(req)
+        self.assertRejected(resp)
+
+        req = RequestFactory().post(
+            '/bmgt435-service/api/auth/sign-out',
+        )
+        req.COOKIES.clear()
+        resp = AuthApi.sign_out(req)
+        self.assertRejected(resp)
+
+
+class TestUserApi(AppTestCaeBase):
 
     def setUp(self):
         BMGTUser(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.').save()
@@ -125,20 +182,20 @@ class TestUserApi(TestCase):
         req.COOKIES['id'] = 1
 
         resp = UserApi.me(req)
-        self.assertEqual(resp.status_code, 200)
+        self.assertResolved(resp)
 
 
     def testUserMeNegative(self):
         resp = _sendGet('/bmgt435-service/api/users/me', UserApi.me, {})
-        self.assertNotEqual(resp.status_code, 200)
+        self.assertRejected(resp)
 
 
     def testUserMeNotActivated(self):
         resp = _sendGet('/bmgt435-service/api/users/me', UserApi.me, {'id':-1})
-        self.assertNotEqual(resp.status_code, 200)
+        self.assertRejected(resp)
 
 
-class TestGroupApi(TestCase):
+class TestGroupApi(AppTestCaeBase):
 
     
     def setUp(self) -> None:
@@ -154,41 +211,41 @@ class TestGroupApi(TestCase):
     def testGroupIntegrity(self):
         try:
             BMGTGroup(number=1).save()
-            self.fail('should assign valid semester when creating groups')
+            self.fail()
         except IntegrityError:
             return
 
     
     def testGetGroupPositive(self):
         resp = _sendGet('/bmgt435-service/api/groups?id=1', GroupApi.get_group, self.cookies)
-        self.assertEqual(resp.status_code, 200)
+        self.assertResolved(resp)
 
     
     def testGetGroupNegative(self):
         resp = _sendGet('/bmgt435-service/api/groups?id=2', GroupApi.get_group, self.cookies)
-        self.assertEqual(resp.status_code, 404)
+        self.assertRejected(resp)
 
 
     def testGetGroupPaginated(self):
         resp = _sendGet('/bmgt435-service/api/groups/paginated', GroupApi.groups_paginated, self.cookies, self.paginatedParams)
-        self.assertEqual(resp.status_code, 200)
+        self.assertResolved(resp)
 
 
     def testGetGroupPaginatedNeg(self):
         params = self.paginatedParams
         params['page'] = -1
         resp = _sendGet('/bmgt435-service/api/groups/paginated', GroupApi.groups_paginated, self.cookies, self.paginatedParams)
-        self.assertEqual(resp.status_code, 400)
+        self.assertRejected(resp)
 
         params['page'] = 100
         resp = _sendGet('/bmgt435-service/api/groups/paginated', GroupApi.groups_paginated, self.cookies, self.paginatedParams)
-        self.assertEqual(resp.status_code, 404)
+        self.assertRejected(resp)
         
 
     def testGroupSuitePos(self):
         # join
         resp = _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'group_id':1}, self.cookies)
-        self.assertEqual(resp.status_code, 200)
+        self.assertResolved(resp)
         self.assertEqual(BMGTGroup.objects.get(id=1).users.count(), 1, 'join group failed')
         self.assertEqual(BMGTUser.objects.get(id=1).group_id, 1, 'join group failed')
 
@@ -201,7 +258,9 @@ class TestGroupApi(TestCase):
 
     def testJoinGroupNeg(self):
         resp = _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'group_id':-1}, self.cookies)
-        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.status_code, 200)
+        self.assertRejected(resp)
 
         resp = _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'groupid':1}, self.cookies)
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 200)
+        self.assertRejected(resp)
