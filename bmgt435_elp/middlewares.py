@@ -2,6 +2,7 @@ from .utils.statusCode import Status
 from django.http import HttpRequest, HttpResponse
 import os
 from .bmgtModels import BMGTUser
+from .utils.apiUtils import AppResponse
 
 
 def CORSMiddleware(get_response):
@@ -33,8 +34,6 @@ def CORSMiddleware(get_response):
 
 def AuthenticationMiddleware(get_response):
 
-    ADMIN_ROLE = "admin"
-
     def middleware(request: HttpRequest):
         """
         assert the validity of cookies
@@ -46,6 +45,8 @@ def AuthenticationMiddleware(get_response):
         2. user utility api's are allowed if there is a user id cookie
         3. manage api's are allowed if there is a user id cookie, and if the user is an admin (validated by a database query)
         """
+        ADMIN_ROLE = "admin"
+        FailedPrompt = "Failed to verify authentication!"
 
         # no authentication required
         if request.path.startswith("/bmgt435-service/api/auth/") or request.path.startswith("/bmgt435-service/admin") or request.path.startswith("/bmgt435-service/static"):
@@ -53,8 +54,7 @@ def AuthenticationMiddleware(get_response):
 
         user_id = request.COOKIES.get('id', None)
         if user_id is None:
-            resp = HttpResponse(status=Status.NOT_FOUND)
-            resp.write("Failed to verify authentication!")
+            resp = AppResponse(reject=FailedPrompt)
             return resp
         else:
             user_query = BMGTUser.objects.filter(id=user_id, activated=True)
@@ -66,26 +66,12 @@ def AuthenticationMiddleware(get_response):
                     if user.role == ADMIN_ROLE:
                         return get_response(request)
                     else:
-                        resp = HttpResponse(status=Status.NOT_FOUND)
-                        resp.write("Failed to verify authentication!")
+                        resp = AppResponse(reject=FailedPrompt)
                         return resp
                 else:      # user authentication required             
                      return get_response(request)
             else:
-                resp = HttpResponse(status=Status.NOT_FOUND)
-                resp.write("Failed to verify authentication!")
+                resp = AppResponse(reject=FailedPrompt)
                 return resp
 
     return middleware
-
-
-# def TestModeMiddleware(get_response):
-#     # add random lag to simulate network latency
-#     def middleware(request: HttpRequest):
-#         if not request.path.startswith("/bmgt435/api/manage/") and not request.path.startswith("/admin/"):
-#             lag = random.randint(0, 20)
-#             lag = round(lag / 10, 1)
-#             time.sleep(lag)
-#         return get_response(request)
-
-#     return middleware

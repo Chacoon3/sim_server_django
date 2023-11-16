@@ -351,7 +351,7 @@ class FoodCenter(CaseBase):
                 "Invalid parameters. Please select at least one location and assign s-S policies to each location.")
         elif not location_valid:
             raise SimulationException(
-                "Simulation failed. Please report the issue.")
+                "Simulation failed. The input location arguments are not valid!")
         elif not policy_valid:
             raise SimulationException(
                 "Simulation failed. s policy must be non-negative and S policy must be greater than s policy")
@@ -490,7 +490,7 @@ class FoodCenter(CaseBase):
                 center.add_inventory(-supply)
                 # this records the inventory after supplying the demand in the week
                 post_inv = center.get_inventory()
-                holding_cost = prior_inv * FoodCenter.__holding_cost
+                holding_cost = post_inv * FoodCenter.__holding_cost
 
                 # history[c_name]['cum_demand'] += demand
                 # history[c_name]['cum_supply'] += supply

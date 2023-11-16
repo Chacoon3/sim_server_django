@@ -23,9 +23,9 @@ def request_error_handler(func):
     API level exception handling
     """
 
-    def wrapped(request, **kwargs) -> HttpResponse:
+    def wrapped(request, *args, **kwargs) -> HttpResponse:
         try:
-            return func(request, **kwargs)
+            return func(request, *args, **kwargs)
 
         except json.JSONDecodeError as e:
             resp = HttpResponse()
@@ -183,21 +183,23 @@ def logger(func):
 
 
 class AppResponse(HttpResponse):
-    def __init__(self, status: int = Status.OK) -> None:
+    def __init__(self, status: int = Status.OK, reject = None, resolve= None) -> None:
         super().__init__(status=status)
-        self.resolver = None
-        self.rejector = None
+        if reject:
+            self.reject(reject)
+        elif resolve:
+            self.resolve(resolve)
 
-    def reject(self, error_msg: str):
+    def reject(self, errorMsg: str):
         self.flush()
         self.write(json.dumps({
-            'error_msg': error_msg
+            'errorMsg': errorMsg,
         }, cls=CustomJSONEncoder
         ))
 
-    def resolve(self, data_resolver):
+    def resolve(self, data):
         self.flush()
         self.write(json.dumps({
-            'resolver': data_resolver
+            'data': data
         }, cls=CustomJSONEncoder
         ))

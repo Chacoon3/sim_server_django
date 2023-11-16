@@ -280,26 +280,24 @@ class CaseApi:
                             case_record.state = BMGTCaseRecord.State.SUCCESS
                             case_record.score = res.score
                             case_record.save()
-                            resp.resolve(json.dumps({
+                            resp.resolve({
                                         "case_record_id": case_record.id,
                                         "summary": case_record.summary_dict,
                                         "file_url": case_record.file_url,
-                                    }))
+                                    })
                         case _:
                             resp.reject("Case not found!")
                 else:
-                    resp.reject(
-                            "You have reached the maximum submission for this case!")
+                    resp.reject("You have reached the maximum submission for this case!")
             else:
-                resp.reject(
-                    "You must join a group first to run the simulation!")
+                resp.reject("You must join a group first to run the simulation!")
 
         except BMGTCase.DoesNotExist:
             resp.reject("Case not found!")
         except KeyError:
             resp.reject("Invalid data format!")
         except SimulationException as e:
-            resp.reject(f"Simulation failed!{e.args[0]}")
+            resp.reject(f"{e.args[0]}")
             
         return resp
 
@@ -341,6 +339,7 @@ class CaseRecordApi:
         group = user.group
         pagerParams = pager_params_from_request(request)
         return generic_paginated_query(BMGTCaseRecord, pagerParams, state=BMGTCaseRecord.State.SUCCESS, group_id=group)
+
 
     @request_error_handler
     @require_GET
@@ -388,8 +387,8 @@ class ManageApi:
                     obj_set = [BMGTUser(semester = semester, **row)
                                 for row in user_csv.to_dict('records')]
 
-                    BMGTUser.objects.bulk_create(obj_set, batch_size=40)
-                    resp.resolve("Imported!")
+                    BMGTUser.objects.bulk_create(obj_set)
+                    resp.resolve(len(obj_set))
                 else:
                     resp.reject("Import failed! Please upload a CSV file that contains the following columns: user_first_name, user_last_name, directory_id")
         except IntegrityError:
@@ -429,14 +428,14 @@ class ManageApi:
         count_case_records = BMGTCaseRecord.objects.count()
         count_case_records_success = BMGTCaseRecord.objects.filter(state=BMGTCaseRecord.State.SUCCESS).count()
 
-        resp.resolve(json.dumps({
+        resp.resolve({
             "count_users": count_users,
             "count_active_users": count_active_users,
             "count_groups": count_groups,
             "count_cases": count_cases,
             "count_case_records": count_case_records,
             "count_case_records_success": count_case_records_success,
-        }))
+        })
 
         return resp
     

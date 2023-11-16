@@ -1,8 +1,11 @@
 from django.test import  TestCase, RequestFactory
+from django.db import IntegrityError, transaction
 from .bmgtModels import *
 from .apis import *
 from typing import Callable
 import json
+import pandas as pd
+import io
 
 
 def _signUp(did:str, password:str):
@@ -25,10 +28,10 @@ def _signIn(did:str, password:str):
     return resp
 
 
-def _sendPost(url:str, method:Callable, data, cookies:dict):
+def _sendPost(url:str, method:Callable, serializable, cookies:dict):
     req = RequestFactory().post(
         url,
-        json.dumps(data),
+        json.dumps(serializable),
         'application/json'
     )
     for key in cookies:
@@ -48,10 +51,25 @@ def _sendGet(url:str, method:Callable, cookies:dict, getParams:dict = None):
     resp = method(req)
     return resp
 
+def _makeFoodCenterCaseParams() -> dict:
+    return {
+        'case_id':1,
+        'case_params': {
+            'centers':['1','2','5'],
+            'policies':[
+                (1900, 3000),
+                (2000, 4000),
+                (3000, 5000),
+            ]
+        }
+    }
 
-def _getResponeData(resp:HttpResponse):
-    return json.loads(resp.content)
-
+def _makeImportUserData() -> pd.DataFrame:
+    return pd.DataFrame({
+        'user_first_name':['32131sdsacx', 'f2', 'f3'],
+        'user_last_name':['l1', 'dasdz2asz', 'l3'],
+        'directory_id':['ddddd', 'fffsazcxzcz', 'didsad3d3'],
+    })
 
 class AppTestCaeBase(TestCase):
 
@@ -61,12 +79,12 @@ class AppTestCaeBase(TestCase):
 
     def assertResolved(self, resp:HttpResponse, msg=None):
         data = self._deserialize_resp_data(resp)
-        self.assertTrue(data.get('resolver') is not None, msg)
+        self.assertTrue(data.get('data', None) is not None, data.get('errorMsg', None) if msg is None else msg)
 
 
     def assertRejected(self, resp:HttpResponse, msg=None):
         data = self._deserialize_resp_data(resp)
-        self.assertTrue(data.get('error_msg') is not None, msg)
+        self.assertTrue(data.get('errorMsg', None) is not None, msg)
         
 
 class TestAuthApi(AppTestCaeBase):
@@ -76,6 +94,21 @@ class TestAuthApi(AppTestCaeBase):
         self.password = 'pa3232.ssword'
         BMGTUser.objects.create(first_name='first', last_name='last', did=self.did, role='admin')
         BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user')
+
+    
+    def testBulkCreate(self):
+        try:
+            with transaction.atomic():
+                BMGTUser.objects.bulk_create([
+                    BMGTUser(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.'),
+                    BMGTUser(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.'),
+                    BMGTUser(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.'),
+                ])
+            self.fail()
+        except IntegrityError:
+            self.assertEqual(
+                BMGTUser.objects.all().count(), 2,
+            )
 
 
     def testQueryBmgtUser(self):
@@ -264,3 +297,102 @@ class TestGroupApi(AppTestCaeBase):
         resp = _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'groupid':1}, self.cookies)
         self.assertEqual(resp.status_code, 200)
         self.assertRejected(resp)
+
+
+class TestCaseAndRecordApi(AppTestCaeBase):
+    def setUp(self):
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.')
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.')
+        BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.')
+        BMGTSemester.objects.create(year=2022, season='fall')
+        BMGTGroup.objects.create(number = 1, semester = BMGTSemester.objects.get(year=2022, season='fall'))
+        BMGTCase.objects.create(name = 'food center', visible = True, max_submission = -1)
+        self.cookies = {'id':1}
+        self.paginatedParams = {'page':1, 'size':10}
+
+        _sendPost('/bmgt435-service/api/groups/join', GroupApi.join_group, {'group_id':1}, self.cookies)
+
+        self.assertEqual(BMGTGroup.objects.get(id=1).users.count(), 1, 'join group failed')
+        self.assertEqual(BMGTUser.objects.get(id=1).group_id, 1, 'join group failed')
+
+    
+    def testGetCasePositive(self):
+        resp = _sendGet('/bmgt435-service/api/cases/get?case_id=1', CaseApi.get, self.cookies)
+        self.assertResolved(resp)
+
+
+    def testGetCaseNegative(self):
+        resp = _sendGet('/bmgt435-service/api/cases/get?id=-1', CaseApi.get, self.cookies)
+        self.assertRejected(resp)
+
+        resp = _sendGet('/bmgt435-service/api/cases/get?id=2', CaseApi.get, self.cookies)
+        self.assertRejected(resp)
+
+
+    def testSubmitCasePositive(self):
+        params = _makeFoodCenterCaseParams()
+        resp = _sendPost('/bmgt435-service/api/cases/submit', CaseApi.submit, params, self.cookies)
+        self.assertResolved(resp)
+        self.assertTrue(BMGTCaseRecord.objects.filter(group_id=1, case_id=1).exists(), 'case record not created')
+
+        resp = _sendGet(
+            'bmgt435-service/api/leader-board/paginated', 
+            CaseRecordApi.leader_board_paginated, 
+            self.cookies,
+            {'page':1, 'size':10, 'case_id':1}
+            )
+        self.assertResolved(resp)
+
+
+    def testSubmitCaseNegative(self):
+        params = _makeFoodCenterCaseParams()
+        negativeCookies = self.cookies.copy()
+        negativeCookies['id'] = -1
+        resp = _sendPost('/bmgt435-service/api/cases/submit', CaseApi.submit, params, negativeCookies)
+        self.assertNotEqual(resp.status_code, 200)
+
+        params = _makeFoodCenterCaseParams()
+        # leave group
+        resp = _sendPost('/bmgt435-service/api/groups/leave', GroupApi.leave_group, {'group_id':1}, self.cookies)
+        self.assertResolved(resp)
+
+        resp = _sendPost('/bmgt435-service/api/cases/submit', CaseApi.submit, params, self.cookies)
+        self.assertRejected(resp)
+
+        self.assertTrue(BMGTCaseRecord.objects.all().count() == 0, 'case record created')
+
+
+class TestManageApi(AppTestCaeBase):
+
+    def setUp(self) -> None:
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.')
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.')
+        BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.')
+
+        BMGTSemester.objects.create(year=2022, season='fall')
+
+        BMGTGroup.objects.create(number = 1, semester = BMGTSemester.objects.get(year=2022, season='fall'))
+        BMGTGroup.objects.create(number = 2, semester = BMGTSemester.objects.get(year=2022, season='fall'))
+
+        BMGTCase.objects.create(name = 'food center', visible = True, max_submission = -1)
+
+        self.cookies = {'id':1}
+        self.paginatedParams = {'page':1, 'size':10}
+
+    
+    def testImportUsersPositive(self):
+        df = _makeImportUserData()
+        ioBuffer = io.BytesIO()
+
+        df.to_csv(ioBuffer, index=False)
+        req = RequestFactory().post(
+            '/bmgt435-service/api/manage/user/import/semester/1',
+            content_type='octet/stream',
+            data=ioBuffer.getvalue(),
+        )
+
+        resp = ManageApi.import_users(req, 1)
+
+        self.assertResolved(resp,)
+        self.assertEqual(BMGTUser.objects.all().count(), 6, )
+        
