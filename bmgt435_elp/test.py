@@ -28,10 +28,10 @@ def _signIn(did:str, password:str):
     return resp
 
 
-def _sendPost(url:str, method:Callable, serializable, cookies:dict):
+def _sendPost(url:str, method:Callable, jsonSerializable, cookies:dict):
     req = RequestFactory().post(
         url,
-        json.dumps(serializable),
+        json.dumps(jsonSerializable),
         'application/json'
     )
     for key in cookies:
@@ -396,3 +396,38 @@ class TestManageApi(AppTestCaeBase):
         self.assertResolved(resp,)
         self.assertEqual(BMGTUser.objects.all().count(), 6, )
         
+
+    def testImportUsersNegative(self):
+        df = _makeImportUserData()
+        ioBuffer = io.BytesIO()
+        df.to_csv(ioBuffer, index=False)
+        req = RequestFactory().post(
+            '/bmgt435-service/api/manage/user/import/semester/1',
+            content_type='octet/stream',
+            data=ioBuffer.getvalue(),
+        )
+        resp = ManageApi.import_users(req, 2)
+        self.assertRejected(resp,)
+
+
+        df.columns = ['user_first_name', 'user_last_name', 'did']
+        ioBuffer = io.BytesIO()
+        df.to_csv(ioBuffer, index=False)
+        req = RequestFactory().post(
+            '/bmgt435-service/api/manage/user/import/semester/1',
+            content_type='octet/stream',
+            data=ioBuffer.getvalue(),
+        )
+        resp = ManageApi.import_users(req, 1)
+        self.assertRejected(resp,)
+
+
+        fakeCookies = self.cookies.copy()
+        fakeCookies['id'] = -1
+        req = RequestFactory().post(
+            '/bmgt435-service/api/manage/user/import/semester/1',
+            content_type='octet/stream',
+            data=ioBuffer.getvalue(),
+        )
+        resp = ManageApi.import_users(req, 1)
+        self.assertRejected(resp)

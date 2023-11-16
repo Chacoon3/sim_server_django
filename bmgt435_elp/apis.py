@@ -393,6 +393,8 @@ class ManageApi:
                     resp.reject("Import failed! Please upload a CSV file that contains the following columns: user_first_name, user_last_name, directory_id")
         except IntegrityError:
             resp.reject("Import failed! Please remove the duplicated directory ID's from the CSV file!")
+        except BMGTSemester.DoesNotExist:
+            resp.reject("Semester not found!")
         
         return resp
 
