@@ -2,9 +2,9 @@ from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, 
 from django.db import IntegrityError
 from django.core.paginator import Paginator, EmptyPage
 from django.http import HttpRequest, HttpResponse
-from .statusCode import Status
+from http import HTTPStatus
 from .jsonUtils import CustomJSONEncoder
-from ..simulation.Cases import SimulationException
+from ..simulation.Core import SimulationException
 from ..bmgtModels import BMGTTransaction
 
 import regex as re
@@ -28,60 +28,51 @@ def request_error_handler(func):
             return func(request, *args, **kwargs)
 
         except json.JSONDecodeError as e:
-            resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(e.args[0])
+            resp = AppResponse()
+            resp.reject(e.args[0])
 
         except ObjectDoesNotExist as e:
-            resp = HttpResponse()
-            resp.status_code = Status.NOT_FOUND
-            resp.write(e.args[0])
+            resp = AppResponse()
+            resp.reject(e.args[0])
 
         except MultipleObjectsReturned as e:
-            resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(e.args[0])
+            resp = AppResponse()
+            resp.reject(e.args[0])
 
         except KeyError as e:
-            resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(f'Key missing: {e.args[0]}')
+            resp = AppResponse()
+            resp.reject(f'Key missing: {e.args[0]}')
 
         except IntegrityError as e:
-            resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(e.args[0])
+            resp = AppResponse()
+            resp.reject(e.args[0])
 
         except ValidationError as e:
-            resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(e.args[0])
+            resp = AppResponse()
+            resp.reject(e.args[0])
 
         except NotImplementedError as e:
-            resp = HttpResponse()
-            resp.status_code = Status.NOT_IMPLEMENTED
-            resp.write(e.args[0])
+            resp = AppResponse()
+            resp.reject(e.args[0])
 
         except SimulationException as e:
-            resp = HttpResponse()
-            resp.status_code = Status.BAD_REQUEST
-            resp.write(e.args[0])
+            resp = AppResponse()
+            resp.reject(e.args[0])
 
         except ValueError as e:
-            resp = HttpResponse()
-            resp.write(e.args[0])
-            resp.status_code = Status.BAD_REQUEST
-
+            resp = AppResponse()
+            resp.reject(e.args[0])
+            
         except Exception as e:
             # resp = HttpResponse()
-            # resp.write(e.args[0])
-            # resp.status_code = Status.INTERNAL_SERVER_ERROR
+            # resp.reject(e.args[0])
+            # resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
 
             # if settings.DEBUG:
             raise
             # else:
                 # resp = HttpResponse()
-                # resp.status_code = Status.INTERNAL_SERVER_ERROR
+                # resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
                 # resp.write("Internal server error!")
         
         return resp
@@ -190,7 +181,7 @@ def logger(func):
 
 
 class AppResponse(HttpResponse):
-    def __init__(self, status: int = Status.OK, reject = None, resolve= None) -> None:
+    def __init__(self, status: int = HTTPStatus.OK, reject = None, resolve= None) -> None:
         super().__init__(status=status)
         if reject and resolve:
             raise ValueError("reject and resolve cannot be both non-null")

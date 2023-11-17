@@ -358,7 +358,7 @@ class TestCaseAndRecordApi(AppTestCaeBase):
         negativeCookies = self.cookies.copy()
         negativeCookies['id'] = -1
         resp = _sendPost('/bmgt435-service/api/cases/submit', CaseApi.submit, params, negativeCookies)
-        self.assertNotEqual(resp.status_code, 200)
+        self.assertRejected(resp)
 
         params = _makeFoodCenterCaseParams()
         # leave group

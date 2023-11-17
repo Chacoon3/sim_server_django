@@ -5,9 +5,9 @@ from django.db import IntegrityError, transaction
 from django.db.models import Max
 
 from .apps import bmgt435_file_system
-from .simulation.Cases import FoodCenter, SimulationException
+from .simulation.Core import SimulationException, SimulationResult
+from .simulation.FoodDelivery import FoodDelivery
 from .bmgtModels import *
-from .utils.statusCode import Status
 from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
 
 import pandas as pd
@@ -271,7 +271,7 @@ class CaseApi:
                     match case_id:
                         case 1:     # food center
                             params = data.get('case_params')
-                            case_instance = FoodCenter(**params)
+                            case_instance = FoodDelivery(**params)
                             res = case_instance.run()
                             case_detail_bytes = res.detail_as_bytes()
                             case_summary = res.summary_as_dict()
@@ -452,14 +452,14 @@ class ManageApi:
             year = data.get('year', None)
             season = data.get('season', None)
             if BMGTSemester.objects.filter(year=year, season=season).exists():
-                resp.reject("Semester already exists!")
+                resp.reject("Failed to create semester. Semester already exists!")
             else:
                 with transaction.atomic():
                     semester = BMGTSemester(year=year, season=season)
                     semester.save()
-                resp.resolve(semester)
+                resp.resolve("Semester created successfully!")
         except IntegrityError:
-            resp.reject("Invalid semester arguments!")
+            resp.reject("Failed to create semester. Invalid semester arguments!")
 
         return resp
     

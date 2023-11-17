@@ -5,6 +5,7 @@ from django.utils import timezone
 from .apps import BmgtPlatformConfig
 import random
 
+
 """
 @: Database schema
 @: Field Naming Convention: snake_case without class name prefix
@@ -12,11 +13,6 @@ import random
 
 
 APP_LABEL = BmgtPlatformConfig.name
-
-
-class BinaryIntegerFlag(models.IntegerChoices):
-    FALSE = 0
-    TRUE = 1
 
 
 class BMGTModelBase(models.Model):
@@ -194,11 +190,11 @@ class BMGTCaseRecord(BMGTModelBase):
         )
 
 
-
 class CaseConfig(BMGTModelBase):
 
     case = models.ForeignKey(
         BMGTCase, on_delete=models.CASCADE, null=False,)
+    semester = models.ForeignKey(BMGTSemester, on_delete=models.CASCADE, null=False,)
     config_json = models.TextField(null=False, default='')
 
     def as_dictionary(self) -> dict:
@@ -209,21 +205,7 @@ class CaseConfig(BMGTModelBase):
             case_name=self.case.name,
             config_json=self.config_json,
         )
-    
 
-    def as_dictionary(self) -> dict:
-        """
-        global interface for json serialization
-        should be implemented by all subclasses
-        the dictionary should be json serializable
-        """
-        raise NotImplementedError("as dictionary method not implemented")
-    
-
-    @property
-    def formatted_create_time(self):
-        return timezone.make_naive(self.create_time).isoformat(sep=' ', timespec='seconds')
-    
 
 class BMGTTransaction(BMGTModelBase):
 

@@ -1,4 +1,3 @@
-from .utils.statusCode import Status
 from django.http import HttpRequest, HttpResponse
 import os
 from .bmgtModels import BMGTUser
@@ -22,7 +21,7 @@ def CORSMiddleware(get_response):
         if request.method == 'OPTIONS':
             resp = HttpResponse()
             config_cors_response(resp)
-            resp.status_code = Status.OK
+            resp.status_code = 200
             return resp
         else:
             resp = get_response(request)

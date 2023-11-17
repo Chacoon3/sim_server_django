@@ -1,222 +1,12 @@
-import scipy
-import pandas as pd
-import numpy as np
-import random as pyr
 import openpyxl
-from queue import PriorityQueue as pQueue
-from io import BytesIO
+import io
+import numpy as np
+import pandas as pd
+import scipy.stats
+from bmgt435_elp.simulation.Core import SimulationResult, CaseBase, SimulationException
 
 
-class SimulationException(Exception):
-    """
-    base class of all exceptions in this simulation platform
-    """
-    pass
-
-
-class Sampler(object):
-    """
-    static class, provides a set of interfaces for random number generation
-    """
-
-    # enum values
-    flag_truncate_minmax = 0
-    flag_truncate_uniform = 1
-    flag_truncate_self_based = 2
-
-    @staticmethod
-    def loglogistic(gamma, beta, alpha):
-        return scipy.stats.fisk.rvs(size=1, loc=gamma, scale=beta, c=alpha)[0]
-
-    @staticmethod
-    def loglogistic_arr(gamma, beta, alpha, arr_size):
-        return scipy.stats.fisk.rvs(size=arr_size, loc=gamma, scale=beta, c=alpha)
-
-    @staticmethod
-    def logistic(mean, stddev):
-        return scipy.stats.logistic.rvs(size=1, loc=mean, scale=stddev)[0]
-
-    @staticmethod
-    def logistic_arr(mean, stddev, arr_size):
-        return scipy.stats.logistic.rvs(size=arr_size, loc=mean, scale=stddev)
-
-    @staticmethod
-    def normal(mean, stddev):
-        return np.random.normal(size=1, loc=mean, scale=stddev, )[0]
-
-    @staticmethod
-    def normal_arr(mean, stddev, arr_size):
-        return np.random.normal(size=arr_size, loc=mean, scale=stddev, )
-
-    @staticmethod
-    def lognorm(mean, stddev):
-        """
-        mean: the first parameter in @risk plus the value of risk shift, if any
-        var: the seccond parameter in @risk
-        not recommended for efficiency issue
-        """
-        return pyr.lognormvariate(mean, stddev)
-
-    @staticmethod
-    def triangular(left, mode, right, size) -> list | np.ndarray | float:
-        return np.random.triangular(left, mode, right, size)
-
-    @staticmethod
-    def lognorm_arr(mean, stddev, arr_size,):
-        '''
-        generate truncated random number from log normal
-        mean: the first parameter in @risk plus the value of risk shift, if any
-        var: the seccond parameter in @risk
-        not recommended for efficiency issue
-        '''
-        return np.array([pyr.lognormvariate(mean, stddev) for i in range(arr_size)])
-
-    @staticmethod
-    def truncate(val, enum_style, lo, hi, rng=None):
-        if enum_style == Sampler.flag_truncate_minmax:
-            val = min(hi, val)
-            val = max(lo, val)
-        elif enum_style == Sampler.flag_truncate_uniform:
-           if lo > val or hi < val:
-               val = np.random.uniform(lo, hi)
-        elif enum_style == Sampler.flag_truncate_self_based:
-            if not rng:
-                raise Exception(
-                    "self_based truncation should have a random number generator")
-            while lo > val or hi < val:
-                val = rng()
-
-        return val
-
-    @staticmethod
-    def __helper_self_based_truncate(val, lo, hi, rng):
-        while val < lo or val > hi:
-            val = rng()
-        return val
-
-    @staticmethod
-    def truncate_arr(val_arr, truncate_style, lo, hi, rng=None):
-        if truncate_style == Sampler.flag_truncate_minmax:
-            val_arr = np.fmin(val_arr, hi)
-            val_arr = np.fmax(val_arr, lo)
-        elif truncate_style == Sampler.flag_truncate_uniform:
-            val_arr = np.where((lo <= val_arr) & (
-                val_arr <= hi), val_arr, np.random.uniform(lo, hi))
-        elif truncate_style == Sampler.flag_truncate_self_based:
-            if not rng:
-                raise Exception(
-                    "self_based truncation should have a random number generator")
-            val_arr = [v if lo < - v and v <=
-                       hi else Sampler.__helper_self_based_truncate(v, lo, hi, rng) for v in val_arr]
-            val_arr = np.array(val_arr)
-
-        return val_arr
-
-
-class SimulationResult(object):
-    """
-    abstraction of simulation result"
-    """
-    def __init__(self, score: float, aggregated_data: pd.DataFrame = None, iteration_data = None) -> None:
-        """
-        score is the single metric used to evaluate a simulation strategy
-        per_iteration_data is a list of data collected in each iteration
-        """
-        self.__score = score
-        self.__aggregation_dataframe = aggregated_data
-        self.__iteration_dataframe = iteration_data
-
-    @property
-    def score(self):
-        return self.__score
-
-    @property
-    def aggregation_dataframe(self) -> pd.DataFrame:
-        return self.__aggregation_dataframe
-
-    @property
-    def iteration_dataframe(self):
-        return self.__iteration_dataframe
-    
-    def detail_as_bytes(self) -> BytesIO:
-        """
-        returns the simulation result as an IO bytes for server-side persistence
-        """
-
-        raise NotImplementedError()
-
-    def summary_as_dict(self) -> str:
-        """
-        returns the simulation result as a json string
-        """
-        raise NotImplementedError()
-
-
-
-class CaseBase(object):
-    """
-    Base class of all the simulation cases
-    """
-
-    _msg_assert_err_ = "Invalid case setting. Simulation cannot execute!"
-
-    def __init__(self,) -> None:
-        return
-
-    def _assert_params(self) -> None:
-        """
-        should be called in the initiator of all subclasses
-        """
-        raise NotImplementedError()
-
-    @staticmethod
-    def score(obj) -> float:
-        """
-        returns the score of the simulation
-        """
-        raise NotImplementedError()
-
-    def simulate(self, ):
-        '''
-        the logic of one iteration in this simulation case
-        '''
-        raise NotImplementedError()
-
-    def run(self, num_iterations=100) -> SimulationResult:
-        '''
-        run the simulation case with specified number of iterations
-        ouutput_style should decide whether detailed or simplified simulation statistics should be returned
-        '''
-        raise NotImplementedError()
-
-
-class CaseDES(CaseBase):
-    """
-    base class of all descrete event simulation cases
-    """
-
-    def __init__(self,  stopCondition) -> None:
-        self.__pQueue = pQueue()  # event queue
-        self.__t = 0    # timer
-        self.__shouldStop = stopCondition
-
-    def run(self, ):
-        while not (self.__shouldStop() or self.__pQueue.empty()):
-            event = self.__pQueue.get()
-            self.__t = event.time()
-            if self.__shouldStop():     # check stop condition after updating system time
-                break
-            else:
-                event.execute()
-
-    def addEvent(self, event) -> None:
-        self.__pQueue.put((event.time, event))
-
-    def getTime(self) -> float:
-        return self.__t
-
-
-class FoodCenterResult(SimulationResult):
+class FoodDeliveryResult(SimulationResult):
 
     def detail_as_bytes(self):
         wb = openpyxl.Workbook(write_only=True)
@@ -230,7 +20,7 @@ class FoodCenterResult(SimulationResult):
         for row in self.iteration_dataframe.values.tolist():
             detail_sheet.append(row)
     
-        bytes_io = BytesIO()
+        bytes_io = io.BytesIO()
         wb.save(filename=bytes_io)
         bytes_io.seek(0)
         return bytes_io
@@ -240,11 +30,11 @@ class FoodCenterResult(SimulationResult):
         return self.aggregation_dataframe.loc[0,].to_dict()
 
 
-class FoodCenter(CaseBase):
+class FoodDelivery(CaseBase):
 
-    class Center(object):
+    class DeliveryHub(object):
         """
-        maintain the state of a center
+        maintain the state of a delivery hub
         """
 
         def __init__(self, policy: tuple[int, int], initial_inventory, name) -> None:
@@ -307,16 +97,16 @@ class FoodCenter(CaseBase):
         """
 
         arr_demand = scipy.stats.multivariate_normal.rvs(
-            mean=FoodCenter.__demand_mu_vector, cov=FoodCenter.__demand_cov_matrix, size=1)
+            mean=FoodDelivery.__demand_mu_vector, cov=FoodDelivery.__demand_cov_matrix, size=1)
         return {
-            center_name: min(max(FoodCenter.__min_week_demand, round(center_demand)),
-                   FoodCenter.__max_week_demand)
-            for center_name, center_demand in zip(FoodCenter.__center_names, arr_demand)
+            center_name: min(max(FoodDelivery.__min_week_demand, round(center_demand)),
+                   FoodDelivery.__max_week_demand)
+            for center_name, center_demand in zip(FoodDelivery.__center_names, arr_demand)
         }
 
     @staticmethod
     def sim_checkout_price(size: int = 1):
-        price = Sampler.triangular(6.7, 29, 76.6, size,)
+        price = np.random.triangular(6.7, 29, 76.6, size)
         price = np.round(price, decimals=2)
         return price
 
@@ -338,7 +128,7 @@ class FoodCenter(CaseBase):
             self.__policies) and len(self.__centers) > 0
 
         location_valid = all(
-            [l in FoodCenter.__center_names for l in self.__centers])
+            [l in FoodDelivery.__center_names for l in self.__centers])
 
         policy_valid = all([p[0] >= 0 and p[1] > p[0]
                            for p in self.__policies])
@@ -365,11 +155,16 @@ class FoodCenter(CaseBase):
         returns the score of the simulation
         """
         avg_profit = obj['perf_metric']
-        avg_profit = (avg_profit - FoodCenter.perf_lower_bound) / \
-            (FoodCenter.perf_upper_bound - FoodCenter.perf_lower_bound)
+        avg_profit = (avg_profit - FoodDelivery.perf_lower_bound) / \
+            (FoodDelivery.perf_upper_bound - FoodDelivery.perf_lower_bound)
         avg_profit = 1 / (1 + np.exp(-avg_profit))
         avg_profit = round(avg_profit * 100, 3) 
         return avg_profit
+    
+
+    def meta_data(self):
+        return {
+        }
 
     def simulate(self):
         # instantialize centers
@@ -377,7 +172,7 @@ class FoodCenter(CaseBase):
         for center_index in range(len(self.__centers)):
             name = self.__centers[center_index]
             policy = self.__policies[center_index]
-            centers.append(FoodCenter.Center(
+            centers.append(FoodDelivery.DeliveryHub(
                 policy=policy, initial_inventory=self.__initial_inventory, name=name))
 
         # define the output data:
@@ -418,7 +213,7 @@ class FoodCenter(CaseBase):
         # main logic
 
         # for every week
-        for every_week in range(FoodCenter.__num_weeks):
+        for every_week in range(FoodDelivery.__num_weeks):
 
             # check inventory
             arr_purchase = [center.s_big() - center.get_inventory() if center.get_inventory()
@@ -457,7 +252,7 @@ class FoodCenter(CaseBase):
 
             # decide the weekly demand at each center
             #center_demand = np.array([self.__dict_center_demand[center.get_name()]() for center in centers])
-            center_demand = FoodCenter.sim_center_demand()
+            center_demand = FoodDelivery.sim_center_demand()
             center_demand = [center_demand[center.get_name()]
                              for center in centers]
 
@@ -477,7 +272,7 @@ class FoodCenter(CaseBase):
                 demand = center_demand[i]
                 supply = center_supply[i]
                 shortage_count = max(0, demand - supply)
-                arr_order_price = FoodCenter.sim_checkout_price(size=demand)
+                arr_order_price = FoodDelivery.sim_checkout_price(size=demand)
                 # orders covered
                 covered_order_price = arr_order_price[:supply]
                 # orders failed to cover
@@ -490,7 +285,7 @@ class FoodCenter(CaseBase):
                 center.add_inventory(-supply)
                 # this records the inventory after supplying the demand in the week
                 post_inv = center.get_inventory()
-                holding_cost = post_inv * FoodCenter.__holding_cost
+                holding_cost = post_inv * FoodDelivery.__holding_cost
 
                 # history[c_name]['cum_demand'] += demand
                 # history[c_name]['cum_supply'] += supply
@@ -524,7 +319,7 @@ class FoodCenter(CaseBase):
             sum(history[c.get_name()]['holding_cost']) for c in centers
         ])
         output['total_fixed_cost'] = len(
-            centers) * self.__num_weeks * FoodCenter.__center_weekly_cost
+            centers) * self.__num_weeks * FoodDelivery.__center_weekly_cost
         output['perf_metric'] = round(
             output['total_revenue'] - output['total_shortage_amount'] -
             output['total_fixed_cost'] - output['total_holding_cost'],
@@ -544,9 +339,9 @@ class FoodCenter(CaseBase):
         for centerwise_df, c_name in zip(arr_df_per_center_statistics, history.keys()):
             # add center name and week index columns
             centerwise_df['center'] = c_name
-            centerwise_df['week'] = range(1, FoodCenter.__num_weeks + 1)
+            centerwise_df['week'] = range(1, FoodDelivery.__num_weeks + 1)
 
         df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
 
-        simRes = FoodCenterResult(score, df_aggregated_statistics, df_per_center_statistics)
+        simRes = FoodDeliveryResult(score, df_aggregated_statistics, df_per_center_statistics)
         return simRes
