@@ -3,7 +3,7 @@ from django.db import IntegrityError
 from django.core.paginator import Paginator, EmptyPage
 from django.http import HttpRequest, HttpResponse
 from .statusCode import Status
-from .jsonUtils import serialize_paginated_data, serialize_models, CustomJSONEncoder
+from .jsonUtils import CustomJSONEncoder
 from ..simulation.Cases import SimulationException
 from ..bmgtModels import BMGTTransaction
 
@@ -145,14 +145,21 @@ def generic_paginated_query(dbModel, pager_params, **kwargs) -> HttpResponse:
         obj_set = obj_set.order_by(
             pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
         pager = Paginator(obj_set, pager_params['size'])
+        page = pager_params['page']
 
-        if pager_params['page'] > pager.num_pages or pager_params['page'] < 1:
+        if page > pager.num_pages or page < 1:
             resp.reject("Page not found!")
         else:
-            resp.resolve(serialize_paginated_data(pager, pager_params['page']))
+            resp.resolve({
+                "page": page,
+                "totalPage": pager.num_pages,
+                "data":pager.page(page).object_list,
+            })
         
     except EmptyPage:
         resp.reject("Page empty!")
+    except KeyError:
+        resp.reject("Missing pagination parameters!")
 
     return resp
 

@@ -8,7 +8,6 @@ from .apps import bmgt435_file_system
 from .simulation.Cases import FoodCenter, SimulationException
 from .bmgtModels import *
 from .utils.statusCode import Status
-from .utils.jsonUtils import serialize_models, serialize_model_instance, serialize_simulation_result
 from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
 
 import pandas as pd
@@ -56,7 +55,7 @@ class AuthApi:
             user = BMGTUser.objects.get(did=did, activated=True,)
             if check_password(password, user.password):
                 AuthApi.__set_auth_cookie(resp, user)
-                resp.resolve(serialize_model_instance(user))
+                resp.resolve(user)
             else:
                 resp.reject("Sign in failed. Please check your directory ID and password!")
         except BMGTUser.DoesNotExist:
@@ -129,7 +128,7 @@ class UserApi:
         try:
             resp = AppResponse()
             user = _get_session_user(request)
-            resp.resolve(serialize_model_instance(user))
+            resp.resolve(user)
         except BMGTUser.DoesNotExist:
             resp.reject("User not found!")
         except KeyError:
@@ -148,7 +147,7 @@ class GroupApi:
             resp = AppResponse()
             group_id = int(request.GET.get('id'))
             group = BMGTGroup.objects.get(id=group_id)
-            resp.resolve(serialize_model_instance(group))
+            resp.resolve(group)
         except BMGTGroup.DoesNotExist:
             resp.reject("Group not found!")
         except KeyError:
@@ -185,7 +184,7 @@ class GroupApi:
                 if group.users.count() < MAX_GROUP_SIZE:
                     user.group = group
                     user.save()
-                    resp.resolve(serialize_model_instance(group))
+                    resp.resolve(group)
                 else:
                     resp.reject("Group already full!")
             else:
@@ -231,7 +230,7 @@ class CaseApi:
             resp = AppResponse()
             case_id = request.GET.get('case_id', None)
             case = BMGTCase.objects.get( id=case_id, visible=True)
-            resp.resolve(serialize_model_instance(case))
+            resp.resolve(case)
         except BMGTCase.DoesNotExist:
             resp.reject("Case not found!")
         except KeyError:
@@ -311,7 +310,7 @@ class CaseRecordApi:
             resp = AppResponse()
             case_record_id = request.GET.get('id', None)
             case_record = BMGTCaseRecord.objects.get(id=case_record_id, )
-            resp.resolve(serialize_model_instance(case_record))
+            resp.resolve(case_record)
         except BMGTCaseRecord.DoesNotExist:
             resp.reject("Case record not found!")
         except KeyError:
@@ -458,7 +457,7 @@ class ManageApi:
                 with transaction.atomic():
                     semester = BMGTSemester(year=year, season=season)
                     semester.save()
-                resp.resolve(serialize_model_instance(semester))
+                resp.resolve(semester)
         except IntegrityError:
             resp.reject("Invalid semester arguments!")
 
@@ -489,7 +488,7 @@ class ManageApi:
         try:
             resp = AppResponse()
             semesters = BMGTSemester.objects.all()
-            resp.resolve(serialize_models(semesters))
+            resp.resolve(semesters)
         except Exception as e:
             resp.reject(e)
 
