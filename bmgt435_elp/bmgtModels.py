@@ -44,14 +44,15 @@ class BMGTModelBase(models.Model):
 class BMGTSemester(BMGTModelBase):
 
     class Meta:
-        unique_together = ('year', 'season')
+        constraints = [
+            models.UniqueConstraint(fields=('year', 'season'), name='unique_semester'),
+            models.CheckConstraint(check=models.Q(year__gte=2022), name='year_constraint'),
+            models.CheckConstraint(check=models.Q(season__in=["spring", "summer", "fall"]), name='season_constraint'),
+        ]
 
-    def semester_year_validator(year):
-        return year >= 2022
-
-    year = models.IntegerField(null=False, unique=False, validators=[semester_year_validator])
+    year = models.IntegerField(null=False, unique=False,)
     season = models.CharField(max_length=10, null=False, unique=False, choices=[
-        ("spring", "spring"), ("summer", "summer"), ("fall", "fall")
+        ("spring", "spring"), ("summer", "summer"), ("fall", "fall"),
     ])
 
     @property

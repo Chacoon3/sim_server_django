@@ -1,4 +1,4 @@
-from django.test import  TestCase, RequestFactory
+from django.test import  TestCase, RequestFactory, Client
 from django.db import IntegrityError, transaction
 from .bmgtModels import *
 from .apis import *
@@ -6,6 +6,14 @@ from typing import Callable
 import json
 import pandas as pd
 import io
+from http.cookies  import SimpleCookie
+
+"""
+Note:
+    request factory based tests bypass the middleware layer
+    to test middleware functionality use the client based tests
+"""
+
 
 
 def _signUp(did:str, password:str):
@@ -79,7 +87,7 @@ class AppTestCaeBase(TestCase):
 
     def assertResolved(self, resp:HttpResponse, msg=None):
         data = self._deserialize_resp_data(resp)
-        self.assertTrue(data.get('data', None) is not None, data.get('errorMsg', None) if msg is None else msg)
+        self.assertTrue(data.get('data', None) is not None, msg)
 
 
     def assertRejected(self, resp:HttpResponse, msg=None):
@@ -152,6 +160,7 @@ class TestAuthApi(AppTestCaeBase):
         _signUp(did, pwd)
         self.assertEqual(BMGTUser.objects.get(did=did).activated, True,)
         resp = _signIn(did, pwd)
+        self.assertTrue(resp.cookies.get('id', None) is not None)
         self.assertResolved(resp)
 
 
@@ -365,9 +374,9 @@ class TestCaseAndRecordApi(AppTestCaeBase):
 class TestManageApi(AppTestCaeBase):
 
     def setUp(self) -> None:
-        BMGTUser.objects.create(first_name='f', last_name='l', did='did', role='admin', activated=1, password='Grave11.')
-        BMGTUser.objects.create(first_name='f', last_name='l', did='did323', role='admin', activated=0, password='Grave11.')
-        BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=1, password='Grave11.')
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did', role='admin', activated=True, password='Grave11.')
+        BMGTUser.objects.create(first_name='f', last_name='l', did='did323', role='admin', activated=False, password='Grave11.')
+        BMGTUser.objects.create(first_name='first321', last_name='last232', did='did232', role='user', activated=True, password='Grave11.')
 
         BMGTSemester.objects.create(year=2022, season='fall')
 
@@ -431,3 +440,56 @@ class TestManageApi(AppTestCaeBase):
         )
         resp = ManageApi.import_users(req, 1)
         self.assertRejected(resp)
+
+    def testViewUsers(self):
+        # positive
+        params = {
+            'page':1,
+            'size':10,
+        }
+        resp = _sendGet('/bmgt435-service/api/manage/user/view', ManageApi.view_users, self.cookies, params)
+        self.assertResolved(resp)
+
+        
+    def testViewUserNegative(self):
+        params = {
+            'page':1,
+            'size':10,
+        }
+        negCookies = self.cookies.copy()
+        negCookies['id'] = -1
+        resp = _sendGet('/bmgt435-service/api/manage/user/view', ManageApi.view_users, negCookies, params)
+        self.assertResolved(resp)
+
+        negCookies = self.cookies.copy()
+        negCookies['id'] = 2
+        resp = _sendGet('/bmgt435-service/api/manage/user/view', ManageApi.view_users, negCookies, params)
+        self.assertResolved(resp)
+
+
+    def testCreateSemesterPositive(self):
+        req = RequestFactory().post(
+            '/bmgt435-service/api/manage/semester/create',
+            json.dumps({'year':2022, 'season':'spring'}),
+            'application/json'
+        )
+        resp = ManageApi.create_semester(req)
+        self.assertResolved(resp)
+        self.assertEqual(BMGTSemester.objects.count(), 2)
+
+
+    def testCreateSemesterNegative(self):
+        c = Client()
+        negCookies = self.cookies.copy()
+        negCookies['id'] = 2
+        c.cookies = SimpleCookie(negCookies)
+        resp = c.post('/bmgt435-service/api/manage/semester/create', json.dumps({'year':2022, 'season':'spring'}), content_type='application/json')
+        self.assertRejected(resp)
+        self.assertEqual(BMGTSemester.objects.count(), 1)
+
+        negCookies = self.cookies.copy()
+        negCookies['id'] = -1
+        c.cookies = SimpleCookie(negCookies)
+        resp = c.post('/bmgt435-service/api/manage/semester/create', json.dumps({'year':2021, 'season':'fall'}), content_type='application/json')      
+        self.assertRejected(resp)
+        self.assertEqual(BMGTSemester.objects.count(), 1)

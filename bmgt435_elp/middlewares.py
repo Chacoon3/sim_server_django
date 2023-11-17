@@ -34,7 +34,7 @@ def CORSMiddleware(get_response):
 
 def AuthenticationMiddleware(get_response):
 
-    def middleware(request: HttpRequest):
+    def middleware(request: HttpRequest) -> HttpResponse:
         """
         assert the validity of cookies
         apart from registration and password retrieval operations, all other operations require cookies
@@ -45,33 +45,29 @@ def AuthenticationMiddleware(get_response):
         2. user utility api's are allowed if there is a user id cookie
         3. manage api's are allowed if there is a user id cookie, and if the user is an admin (validated by a database query)
         """
-        ADMIN_ROLE = "admin"
-        FailedPrompt = "Failed to verify authentication!"
+        ADMIN = "admin"
+        failedPrompt = "Failed to verify authentication!"
 
-        # no authentication required
-        if request.path.startswith("/bmgt435-service/api/auth/") or request.path.startswith("/bmgt435-service/admin") or request.path.startswith("/bmgt435-service/static"):
+        require_no_auth = request.path.startswith("/bmgt435-service/api/auth/") or request.path.startswith("/bmgt435-service/admin") or request.path.startswith("/bmgt435-service/static")
+        if require_no_auth:
             return get_response(request)
 
         user_id = request.COOKIES.get('id', None)
         if user_id is None:
-            resp = AppResponse(reject=FailedPrompt)
-            return resp
+            return AppResponse(reject=failedPrompt)
+        
+        require_admin = request.path.startswith("/bmgt435-service/api/manage/")
+        query = BMGTUser.objects.filter(id=user_id, activated=True)
+        if query.exists():
+            user = query.get()
+            if require_admin:
+                if user.role == ADMIN:
+                    return get_response(request)
+                else:
+                    return AppResponse(reject=failedPrompt)
+            else:   
+                 return get_response(request)
         else:
-            user_query = BMGTUser.objects.filter(id=user_id, activated=True)
-            if user_query.exists():
-                user = user_query.get()
-                request.bmgt_user = user    # store the user info
-                # admin authentication required
-                if request.path.startswith("/bmgt435-service/api/manage/"):
-                    if user.role == ADMIN_ROLE:
-                        return get_response(request)
-                    else:
-                        resp = AppResponse(reject=FailedPrompt)
-                        return resp
-                else:      # user authentication required             
-                     return get_response(request)
-            else:
-                resp = AppResponse(reject=FailedPrompt)
-                return resp
+            return AppResponse(reject=failedPrompt)
 
     return middleware

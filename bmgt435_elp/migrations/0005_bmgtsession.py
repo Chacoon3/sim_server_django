@@ -12,12 +12,12 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.CreateModel(
-            name='BMGTSession',
-            fields=[
-                ('create_time', models.DateTimeField(auto_created=True, default=django.utils.timezone.now)),
-                ('sid', models.UUIDField(editable=False, primary_key=True, serialize=False)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='bmgt435_elp.bmgtuser')),
-            ],
-        ),
+        # migrations.CreateModel(
+        #     name='BMGTSession',
+        #     fields=[
+        #         ('create_time', models.DateTimeField(auto_created=True, default=django.utils.timezone.now)),
+        #         ('sid', models.UUIDField(editable=False, primary_key=True, serialize=False)),
+        #         ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='bmgt435_elp.bmgtuser')),
+        #     ],
+        # ),
     ]

@@ -1,7 +1,7 @@
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.contrib.auth.hashers import make_password, check_password
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Max
 
 from .apps import bmgt435_file_system
@@ -260,12 +260,13 @@ class CaseApi:
             if user.group != None:
                 group = user.group
                 if CaseApi.__case_submittable(case_instance, group):
-                    case_record = BMGTCaseRecord(
-                        user=user,
-                        case=case_instance, group=group, state=BMGTCaseRecord.State.RUNNING,
-                        file_name = BMGTCaseRecord.generate_file_name(group, user, case_instance)
-                    )
-                    case_record.save()
+                    with transaction.atomic():
+                        case_record = BMGTCaseRecord(
+                            user=user,
+                            case=case_instance, group=group, state=BMGTCaseRecord.State.RUNNING,
+                            file_name = BMGTCaseRecord.generate_file_name(group, user, case_instance)
+                        )
+                        case_record.save()
                     
                     # run logic
                     match case_id:
@@ -446,16 +447,21 @@ class ManageApi:
     @require_POST
     @staticmethod
     def create_semester(request: HttpRequest) -> HttpResponse:
-        resp = AppResponse()
-        data = json.loads(request.body)
-        year = data.get('year', None)
-        season = data.get('season', None)
-        if BMGTSemester.objects.filter(year=year, season=season).exists():
-            resp.reject("Semester already exists!")
-        else:
-            semester = BMGTSemester.objects.create(year=year, season=season)
-            semester.save()
-            resp.resolve(serialize_model_instance(semester))
+        try:
+            resp = AppResponse()
+            data = json.loads(request.body)
+            year = data.get('year', None)
+            season = data.get('season', None)
+            if BMGTSemester.objects.filter(year=year, season=season).exists():
+                resp.reject("Semester already exists!")
+            else:
+                with transaction.atomic():
+                    semester = BMGTSemester(year=year, season=season)
+                    semester.save()
+                resp.resolve(serialize_model_instance(semester))
+        except IntegrityError:
+            resp.reject("Invalid semester arguments!")
+
         return resp
     
     

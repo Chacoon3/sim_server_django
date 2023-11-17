@@ -43,7 +43,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('create_time', models.DateTimeField(auto_created=True, default=django.utils.timezone.now)),
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False)),
-                ('year', models.IntegerField(validators=[bmgt435_elp.bmgtModels.BMGTSemester.semester_year_validator])),
+                ('year', models.IntegerField()),
                 ('season', models.CharField(choices=[('spring', 'spring'), ('summer', 'summer'), ('fall', 'fall')], max_length=10)),
             ],
             options={

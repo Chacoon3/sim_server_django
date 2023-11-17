@@ -185,6 +185,9 @@ def logger(func):
 class AppResponse(HttpResponse):
     def __init__(self, status: int = Status.OK, reject = None, resolve= None) -> None:
         super().__init__(status=status)
+        if reject and resolve:
+            raise ValueError("reject and resolve cannot be both non-null")
+        
         if reject:
             self.reject(reject)
         elif resolve:
