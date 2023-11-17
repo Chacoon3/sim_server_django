@@ -5,8 +5,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Max
 
 from .apps import bmgt435_file_system
-from .simulation.Core import SimulationException, SimulationResult
-from .simulation.FoodDelivery import FoodDelivery
+from .simulation import FoodDelivery, SimulationException
 from .bmgtModels import *
 from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
 
@@ -403,13 +402,38 @@ class ManageApi:
     @require_POST
     @staticmethod
     def config_case(request: HttpRequest) -> HttpResponse:
-        resp = HttpResponse()
-
-        data = json.loads(request.body)
-
-        case_id = data.get('case_id', None)
+        try:
+            resp = AppResponse()
+            data = json.loads(request.body)
+            case_id = data.get('case_id', None)
+            semester_id = data.get('semester_id', None)
+            query = BMGTCaseConfig.objects.filter(case_id=case_id, semester_id=semester_id)
+            if query.exists():
+                config = query.get()
+            else:
+                config = BMGTCaseConfig(case_id=case_id, semester_id=semester_id)
+            
+            match case_id:
+                case 1:
+                    # food delivery
+                    params = data.get('case_params')
+                    
+                    config.config_json = json.dumps(params)
+                    config.save()
+                    resp.resolve("Case configured!")
+                case _:
+                    raise BMGTCase.DoesNotExist
+            
+        except BMGTCase.DoesNotExist:
+            resp.reject("Case not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
 
         return resp
+    
+
+    def  view_case(request: HttpRequest) -> HttpResponse:
+        pass
 
     @request_error_handler
     @require_GET

@@ -1,4 +1,4 @@
-from django.db.models import QuerySet
+import django.db.models as models
 from bmgt435_elp.simulation.Core import SimulationResult
 from ..bmgtModels import BMGTModelBase
 
@@ -14,10 +14,11 @@ class CustomJSONEncoder(json.JSONEncoder):
         datetime.datetime: lambda obj: obj.astimezone().isoformat(),
         np.integer: lambda obj: int(obj),
         np.floating: lambda obj: float(obj),
-        QuerySet: lambda obj: [model.as_dictionary() for model in obj],
+        models.QuerySet: lambda obj: [model.as_dictionary() for model in obj],
         list[BMGTModelBase]: lambda obj: [model.as_dictionary() for model in obj],
         BMGTModelBase: lambda obj: obj.as_dictionary(),
         SimulationResult: lambda obj: obj.iteration_dataframe,
+        models.JSONField: lambda jsonStr: json.loads(jsonStr),  # for json encoded data, first decode it to dict, then encode it again
     }
 
     def default(self, obj):
@@ -29,7 +30,7 @@ class CustomJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def serialize_models(querySet:QuerySet | list[BMGTModelBase]) -> str:
+def serialize_models(querySet: models.QuerySet | list[BMGTModelBase]) -> str:
     return json.dumps([model.as_dictionary() for model in querySet], cls=CustomJSONEncoder)
 
 def serialize_model_instance(instance:BMGTModelBase) -> str:

@@ -190,7 +190,7 @@ class BMGTCaseRecord(BMGTModelBase):
         )
 
 
-class CaseConfig(BMGTModelBase):
+class BMGTCaseConfig(BMGTModelBase):
 
     case = models.ForeignKey(
         BMGTCase, on_delete=models.CASCADE, null=False,)

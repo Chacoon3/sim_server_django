@@ -36,6 +36,9 @@ urlpatterns = [
     path('api/manage/group/create', ManageApi.batch_create_group,),
     path('api/manage/group/paginated', ManageApi.group_view_paginated,),
 
+    path('api/manage/case/config', ManageApi.config_case,),
+    path('api/manage/case/view', ManageApi.view_case,),
+
     path('api/manage/semester/create', ManageApi.create_semester,),
     path('api/manage/semester/all', ManageApi.get_semesters,),
 

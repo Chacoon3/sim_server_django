@@ -3,7 +3,7 @@ import io
 import numpy as np
 import pandas as pd
 import scipy.stats
-from bmgt435_elp.simulation.Core import SimulationResult, CaseBase, SimulationException
+from .Core import CaseBase, SimulationException, SimulationResult
 
 
 class FoodDeliveryResult(SimulationResult):
@@ -91,7 +91,7 @@ class FoodDelivery(CaseBase):
     __num_iterations: int = 1
 
     @staticmethod
-    def sim_center_demand():
+    def __sim_center_demand():
         """
         returns discretized, truncated demand of all the six centers regardless of whether it is chosen, stored in a dict where keys are center ids
         """
@@ -105,10 +105,12 @@ class FoodDelivery(CaseBase):
         }
 
     @staticmethod
-    def sim_checkout_price(size: int = 1):
+    def __sim_checkout_price(size: int = 1):
         price = np.random.triangular(6.7, 29, 76.6, size)
         price = np.round(price, decimals=2)
         return price
+    
+
 
     def __init__(
         self,
@@ -252,7 +254,7 @@ class FoodDelivery(CaseBase):
 
             # decide the weekly demand at each center
             #center_demand = np.array([self.__dict_center_demand[center.get_name()]() for center in centers])
-            center_demand = FoodDelivery.sim_center_demand()
+            center_demand = FoodDelivery.__sim_center_demand()
             center_demand = [center_demand[center.get_name()]
                              for center in centers]
 
@@ -272,7 +274,7 @@ class FoodDelivery(CaseBase):
                 demand = center_demand[i]
                 supply = center_supply[i]
                 shortage_count = max(0, demand - supply)
-                arr_order_price = FoodDelivery.sim_checkout_price(size=demand)
+                arr_order_price = FoodDelivery.__sim_checkout_price(size=demand)
                 # orders covered
                 covered_order_price = arr_order_price[:supply]
                 # orders failed to cover
