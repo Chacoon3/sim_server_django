@@ -35,11 +35,21 @@ class BMGTModelBase(models.Model):
     @property
     def formatted_create_time(self):
         return timezone.make_naive(self.create_time).isoformat(sep=' ', timespec='seconds')
+    
+
+class BMGTJsonField(models.TextField):
+    """
+    Subclassed to flag data stored in JSON format
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
 class BMGTSemester(BMGTModelBase):
 
     class Meta:
+        app_label = APP_LABEL
         constraints = [
             models.UniqueConstraint(fields=('year', 'season'), name='unique_semester'),
             models.CheckConstraint(check=models.Q(year__gte=2022), name='year_constraint'),
@@ -131,6 +141,8 @@ class BMGTUser(BMGTModelBase):
 
 class BMGTCase(BMGTModelBase):
 
+    # this pk has to be manually set because app logic depends on it
+    id = models.IntegerField(auto_created=False, primary_key=True, null=False)
     name = models.CharField(max_length=50, null=False, default='')
     visible = models.BooleanField(default=True, null=False)
     max_submission = models.IntegerField(default=5, null=False, unique=False)
@@ -140,6 +152,29 @@ class BMGTCase(BMGTModelBase):
             id=self.id,
             create_time=self.formatted_create_time,
             name=self.name,
+        )
+    
+class BMGTCaseConfig(BMGTModelBase):
+
+    class Meta:
+        app_label = APP_LABEL
+        constraints = [
+            models.UniqueConstraint(fields=('case_id', 'semester_id'), name='unique_case_config'),
+        ]
+    
+    case = models.ForeignKey(BMGTCase, on_delete=models.CASCADE, null=False)
+    semester = models.ForeignKey(BMGTSemester, on_delete=models.CASCADE, null=False)
+    config_json = BMGTJsonField(null=False, default="", unique=False)  # editable configuration regarding a case
+
+    def as_dictionary(self) -> dict:
+        return dict(
+            id=self.id,
+            create_time=self.formatted_create_time,
+            case_id=self.case.id if self.case else None,
+            case_name=self.case.name if self.case else None,
+            semester_id=self.semester.id if self.semester else None,
+            semester_name=self.semester.name if self.semester else None,
+            config_json=self.config_json,
         )
 
 
@@ -187,23 +222,6 @@ class BMGTCaseRecord(BMGTModelBase):
                 state=self.State.choices[self.state][1],
                 score=self.score,
                 file = self.file_name,
-        )
-
-
-class BMGTCaseConfig(BMGTModelBase):
-
-    case = models.ForeignKey(
-        BMGTCase, on_delete=models.CASCADE, null=False,)
-    semester = models.ForeignKey(BMGTSemester, on_delete=models.CASCADE, null=False,)
-    config_json = models.TextField(null=False, default='')
-
-    def as_dictionary(self) -> dict:
-        return dict(
-            id=self.id,
-            create_time=self.formatted_create_time,
-            case_id=self.case.id,
-            case_name=self.case.name,
-            config_json=self.config_json,
         )
 
 

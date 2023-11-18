@@ -22,6 +22,7 @@ All requests have been verified to have valid user id except for those of the Au
 CASE_RECORD_PATH = bmgt435_file_system.base_location.__str__() + "case_records/"
 MAX_GROUP_SIZE = 4
 
+
 def _get_session_user(request: HttpRequest) -> BMGTUser:
     """
     raise key error if cookie not found
@@ -141,6 +142,24 @@ class GroupApi:
     @request_error_handler
     @require_GET
     @staticmethod
+    def me(request: HttpRequest,) -> HttpResponse:
+        try:
+            resp = AppResponse()
+            user = _get_session_user(request)
+            if user.group != None:
+                resp.resolve(user.group)
+            else:
+                resp.resolve(None)
+        except BMGTUser.DoesNotExist:
+            resp.reject("User not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+
+        return resp
+
+    @request_error_handler
+    @require_GET
+    @staticmethod
     def get_group(request: HttpRequest) -> AppResponse:
         try:
             resp = AppResponse()
@@ -199,14 +218,17 @@ class GroupApi:
     @require_POST
     @staticmethod
     def leave_group(request: HttpRequest) -> HttpResponse:
-        resp = AppResponse()
-        user: BMGTUser = _get_session_user(request)
-        if user.group != None:
-            user.group = None
-            user.save()
-            resp.resolve("Group left!")
-        else:
-            resp.resolve("You are not in a group!")
+        try:
+            resp = AppResponse()
+            user: BMGTUser = _get_session_user(request)
+            if user.group != None:
+                user.group = None
+                user.save()
+                resp.resolve("Group left!")
+            else:
+                resp.reject("You are not in a group!")
+        except BMGTUser.DoesNotExist:
+            resp.reject("User not found!")
 
         return resp
 
@@ -219,7 +241,6 @@ class CaseApi:
                 state__in=[BMGTCaseRecord.State.RUNNING, BMGTCaseRecord.State.SUCCESS]
             ).count()
         return case.max_submission == -1 or count_submission < case.max_submission
-
 
     @request_error_handler
     @require_GET
@@ -251,13 +272,23 @@ class CaseApi:
     def submit(request: HttpRequest) -> HttpResponse:
         try:
             resp = AppResponse()
-            user: BMGTUser = _get_session_user(request)
+            case_record = None # place holder
+            user = _get_session_user(request)
             data = json.loads(request.body)
             case_id = int(data.get('case_id'))
             case_instance = BMGTCase.objects.get(id=case_id)
             if user.group != None:
                 group = user.group
-                if CaseApi.__case_submittable(case_instance, group):
+                if CaseApi.__case_submittable(case_instance, group):                    
+                    # id to simulation case mapping
+                    match case_id:
+                        case 1:     # food center
+                            params = data.get('case_params')
+                            simulation_instance = FoodDelivery(**params)
+                        case _:
+                            resp.reject("Case not found!")
+
+                    # create case record first. simulation eligibility is calculated based on valid case records
                     with transaction.atomic():
                         case_record = BMGTCaseRecord(
                             user=user,
@@ -265,38 +296,52 @@ class CaseApi:
                             file_name = BMGTCaseRecord.generate_file_name(group, user, case_instance)
                         )
                         case_record.save()
-                    
-                    # run logic
-                    match case_id:
-                        case 1:     # food center
-                            params = data.get('case_params')
-                            case_instance = FoodDelivery(**params)
-                            res = case_instance.run()
-                            case_detail_bytes = res.detail_as_bytes()
-                            case_summary = res.summary_as_dict()
-                            case_record.summary_dict = case_summary
-                            bmgt435_file_system.save(CASE_RECORD_PATH + case_record.file_name, case_detail_bytes)
-                            case_record.state = BMGTCaseRecord.State.SUCCESS
-                            case_record.score = res.score
-                            case_record.save()
-                            resp.resolve({
-                                        "case_record_id": case_record.id,
-                                        "summary": case_record.summary_dict,
-                                        "file_url": case_record.file_url,
-                                    })
-                        case _:
-                            resp.reject("Case not found!")
+
+                    # run simulation
+                    res = simulation_instance.run()
+                    case_detail_bytes = res.detail_as_excel_stream()
+                    case_summary = res.summary_as_dict()
+                    case_record.summary_dict = case_summary
+                    bmgt435_file_system.save(CASE_RECORD_PATH + case_record.file_name, case_detail_bytes)
+                    case_record.state = BMGTCaseRecord.State.SUCCESS
+                    case_record.score = res.score
+                    case_record.save()
+                    resp.resolve({
+                        "case_record_id": case_record.id,
+                        "summary": case_record.summary_dict,
+                        "file_url": case_record.file_url,
+                        })
                 else:
                     resp.reject("You have reached the maximum submission for this case!")
             else:
-                resp.reject("You must join a group first to run the simulation!")
+                resp.reject("You must join a group to run the simulation!")
 
+        except BMGTUser.DoesNotExist:
+            resp.reject("Invalid credential!")
+            if case_record:
+                case_record.state = BMGTCaseRecord.State.FAILED
+                case_record.save()
         except BMGTCase.DoesNotExist:
             resp.reject("Case not found!")
+            if case_record:
+                case_record.state = BMGTCaseRecord.State.FAILED
+                case_record.save()
         except KeyError:
             resp.reject("Invalid data format!")
+            if case_record:
+                case_record.state = BMGTCaseRecord.State.FAILED
+                case_record.save()
         except SimulationException as e:
             resp.reject(f"{e.args[0]}")
+            if case_record:
+                case_record.state = BMGTCaseRecord.State.FAILED
+                case_record.save()
+        except Exception:
+            if case_record:
+                case_record.state = BMGTCaseRecord.State.FAILED
+                case_record.save()
+            
+            raise
             
         return resp
 
@@ -456,7 +501,7 @@ class ManageApi:
 
         resp.resolve({
             "count_users": count_users,
-            "count_active_users": count_active_users,
+            "count_activated_users": count_active_users,
             "count_groups": count_groups,
             "count_cases": count_cases,
             "count_case_records": count_case_records,
@@ -478,12 +523,13 @@ class ManageApi:
             if BMGTSemester.objects.filter(year=year, season=season).exists():
                 resp.reject("Failed to create semester. Semester already exists!")
             else:
-                with transaction.atomic():
-                    semester = BMGTSemester(year=year, season=season)
-                    semester.save()
+                semester = BMGTSemester(year=year, season=season)
+                semester.save()
                 resp.resolve("Semester created successfully!")
         except IntegrityError:
             resp.reject("Failed to create semester. Invalid semester arguments!")
+        except KeyError:
+            resp.reject("Invalid data format!")
 
         return resp
     
@@ -491,12 +537,12 @@ class ManageApi:
     @request_error_handler
     @require_POST
     @staticmethod
-    def delete_semester(request: HttpRequest) -> HttpResponse:
+    def delete_semesters(request: HttpRequest) -> HttpResponse:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
-            semester_id = data.get('semester_id', None)
-            semester = BMGTSemester.objects.get(id=semester_id)
+            arr_semester_id = data.get('semester_id', None)
+            semester = BMGTSemester.objects.filter(id__in=arr_semester_id)
             semester.delete()
             resp.resolve("Semester deleted!")
         except BMGTSemester.DoesNotExist:
@@ -543,12 +589,29 @@ class ManageApi:
         
         return resp
     
-
     @request_error_handler
     @require_GET
     @staticmethod
     def group_view_paginated(request: HttpRequest) -> HttpResponse:
         return generic_paginated_query(BMGTGroup, pager_params_from_request(request))
+    
+    @request_error_handler
+    @require_POST 
+    @staticmethod
+    def delete_group(request: HttpRequest) -> HttpResponse:
+        try:
+            resp = AppResponse()
+            data = json.loads(request.body)
+            arr_group_id = data.get('group_id', None)
+            with transaction.atomic():
+                groups = BMGTGroup.objects.filter(id__in=arr_group_id)
+                groups.delete()
+            resp.resolve("Group deleted!")
+        except BMGTGroup.DoesNotExist:
+            resp.reject("Group not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+        return resp
 
 
 class FeedbackApi:

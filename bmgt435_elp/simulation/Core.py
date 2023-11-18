@@ -70,8 +70,7 @@ class CaseBase(object):
         """
         raise NotImplementedError()
 
-    @staticmethod
-    def score(obj) -> float:
+    def score(self, obj) -> float:
         """
         returns the score of the simulation
         """

@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/users/me', UserApi.me, name='user-me'),
 
 
+    path('api/groups/me', GroupApi.me,),
     path('api/groups/get', GroupApi.get_group, ),
     path('api/groups/paginated', GroupApi.groups_paginated, ),
     path('api/groups/join', GroupApi.join_group, ),
@@ -30,23 +31,23 @@ urlpatterns = [
     path("api/leader-board/paginated", CaseRecordApi.leader_board_paginated ),
 
 
-    path('api/manage/user/import/semester/<int:semester_id>', ManageApi.import_users,),
-    path('api/manage/user/view', ManageApi.view_users,),
+    path('api/manage/users/import/semester/<int:semester_id>', ManageApi.import_users,),
+    path('api/manage/users/view', ManageApi.view_users,),
 
-    path('api/manage/group/create', ManageApi.batch_create_group,),
-    path('api/manage/group/paginated', ManageApi.group_view_paginated,),
+    path('api/manage/groups/create', ManageApi.batch_create_group,),
+    path('api/manage/groups/paginated', ManageApi.group_view_paginated,),
+    path('api/manage/groups/delete', ManageApi.delete_group,),
 
-    path('api/manage/case/config', ManageApi.config_case,),
-    path('api/manage/case/view', ManageApi.view_case,),
+    path('api/manage/cases/config', ManageApi.config_case,),
+    path('api/manage/cases/view', ManageApi.view_case,),
 
-    path('api/manage/semester/create', ManageApi.create_semester,),
-    path('api/manage/semester/all', ManageApi.get_semesters,),
+    path('api/manage/semesters/create', ManageApi.create_semester,),
+    path('api/manage/semesters/all', ManageApi.get_semesters,),
+    path('api/manage/semesters/delete', ManageApi.get_semesters,),
 
-    path('api/manage/system/status', ManageApi.system_status,),
-    path('api/manage/feedback/paginated', FeedbackApi.feedback_paginated,),
-
+    path('api/manage/systems/status', ManageApi.system_status,),
     
-    path('api/feedback/post', FeedbackApi.post, ),
-
+    path('api/feedbacks/post', FeedbackApi.post, ),
+    path('api/manage/feedbacks/paginated', FeedbackApi.feedback_paginated,),
     
 ]

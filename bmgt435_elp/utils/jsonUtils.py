@@ -1,6 +1,6 @@
 import django.db.models as models
 from bmgt435_elp.simulation.Core import SimulationResult
-from ..bmgtModels import BMGTModelBase
+from ..bmgtModels import BMGTModelBase, BMGTJsonField
 
 import numpy as np
 import json
@@ -18,7 +18,7 @@ class CustomJSONEncoder(json.JSONEncoder):
         list[BMGTModelBase]: lambda obj: [model.as_dictionary() for model in obj],
         BMGTModelBase: lambda obj: obj.as_dictionary(),
         SimulationResult: lambda obj: obj.iteration_dataframe,
-        models.JSONField: lambda jsonStr: json.loads(jsonStr),  # for json encoded data, first decode it to dict, then encode it again
+        BMGTJsonField: lambda obj : json.loads(obj),  # for json encoded data, first decode it to dict, then encode it again
     }
 
     def default(self, obj):

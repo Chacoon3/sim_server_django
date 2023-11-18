@@ -8,7 +8,7 @@ from .Core import CaseBase, SimulationException, SimulationResult
 
 class FoodDeliveryResult(SimulationResult):
 
-    def detail_as_bytes(self):
+    def detail_as_excel_stream(self):
         wb = openpyxl.Workbook(write_only=True)
         main_sheet = wb.create_sheet('main')
         main_sheet.append(self.aggregation_dataframe.columns.tolist())
@@ -116,24 +116,31 @@ class FoodDelivery(CaseBase):
         self,
         centers: list[str] = [],
         policies: list[tuple[int, int]] | list[list[int]] = [],
+        input_mapper: dict | None = None,
     ):
 
         super().__init__()
         self.__centers = centers
         self.__policies = policies
+        self.__input_mapper = input_mapper
         self._assert_params()
 
     def _assert_params(self) -> None:
         config_valid = self.__num_iterations > 0 and self.__num_weeks > 0
 
-        format_valid = len(self.__centers) == len(
-            self.__policies) and len(self.__centers) > 0
+        format_valid = len(self.__centers) == len(self.__policies) and len(self.__centers) > 0
 
-        location_valid = all(
-            [l in FoodDelivery.__center_names for l in self.__centers])
+        location_valid = all([l in FoodDelivery.__center_names for l in self.__centers])
 
-        policy_valid = all([p[0] >= 0 and p[1] > p[0]
-                           for p in self.__policies])
+        policy_valid = all([p[0] >= 0 and p[1] > p[0] for p in self.__policies])
+
+        if self.__input_mapper is  not None:
+            s_keys = set(self.__input_mapper.keys())
+            s_values = set(self.__input_mapper.values())
+            s_valid_values = set(FoodDelivery.__center_names)
+            input_mapper_valid = s_keys == s_values and s_keys == s_valid_values
+            if not input_mapper_valid:
+                raise SimulationException("Simulation failed. The input mapper is not valid!")
 
         if not config_valid:
             raise SimulationException(
@@ -151,8 +158,8 @@ class FoodDelivery(CaseBase):
     perf_lower_bound = -800000
     perf_upper_bound = 1200000
 
-    @staticmethod
-    def score(obj) -> float:
+
+    def score(self, obj) -> float:
         """
         returns the score of the simulation
         """
@@ -166,17 +173,16 @@ class FoodDelivery(CaseBase):
 
     def meta_data(self):
         return {
+            'num_iterations': self.__num_iterations,
+            'num_weeks': self.__num_weeks,
         }
 
     def simulate(self):
         # instantialize centers
-        centers = []
-        for center_index in range(len(self.__centers)):
-            name = self.__centers[center_index]
-            policy = self.__policies[center_index]
-            centers.append(FoodDelivery.DeliveryHub(
-                policy=policy, initial_inventory=self.__initial_inventory, name=name))
-
+        centers = [
+            FoodDelivery.DeliveryHub(policy=policy, initial_inventory=FoodDelivery.__initial_inventory, name=center) for \
+            policy, center in zip(self.__policies, self.__centers)
+        ]
         # define the output data:
         #       the output data describes one iteration of the simulation
         #       a nested dictionary is used to store the weekly state of each center and thereby yield the aggregation statistics
@@ -223,18 +229,18 @@ class FoodDelivery(CaseBase):
             total_purchase = sum(arr_purchase)
 
             # check if inventory request exceeds the constraint
-            if total_purchase > self.__max_weekly_restock:
+            if total_purchase > FoodDelivery.__max_weekly_restock:
                 # if exceeds the constraint, adjust the original request array proportionally so that the sum equals the constraint
                 purchase_ratio = np.array(arr_purchase) / total_purchase
-                adjusted_purchase = purchase_ratio * self.__max_weekly_restock
+                adjusted_purchase = purchase_ratio * FoodDelivery.__max_weekly_restock
                 adjusted_purchase = np.round(
                     adjusted_purchase, decimals=0).astype(int)
                 total_purchase = sum(adjusted_purchase)
 
                 # in case the conversion from float to int leads the adjusted purchase to exceed the constraint
                 # reduce the purchase amout of each center till the sum equals the constraint again
-                if total_purchase > self.__max_weekly_restock:
-                    diff = total_purchase - self.__max_weekly_restock
+                if total_purchase > FoodDelivery.__max_weekly_restock:
+                    diff = total_purchase - FoodDelivery.__max_weekly_restock
                     while diff > 0:
                         for i in range(len(adjusted_purchase)):
                             if (adjusted_purchase[i] > 0):
@@ -330,6 +336,9 @@ class FoodDelivery(CaseBase):
         return output
 
     def run(self):
+        if self.__input_mapper is not None:
+            self.__centers = [self.__input_mapper[c] for c in self.__centers]
+        
         res = self.simulate()
         score = self.score(res)
         history = res.pop('history')
@@ -337,13 +346,17 @@ class FoodDelivery(CaseBase):
         arr_df_per_center_statistics = [
             pd.DataFrame(history[center_name]) for center_name in history.keys()
         ]
-
         for centerwise_df, c_name in zip(arr_df_per_center_statistics, history.keys()):
             # add center name and week index columns
             centerwise_df['center'] = c_name
             centerwise_df['week'] = range(1, FoodDelivery.__num_weeks + 1)
 
         df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
+        
+        if self.__input_mapper is not None:
+            df_per_center_statistics['center'] = df_per_center_statistics['center'].map(
+                {v: k for k, v in self.__input_mapper.items()}
+            )
 
         simRes = FoodDeliveryResult(score, df_aggregated_statistics, df_per_center_statistics)
         return simRes
