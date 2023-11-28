@@ -26,10 +26,10 @@ def _signUp(did:str, password:str):
     return resp
 
 
-def _signIn(did:str, password:str):
+def _signIn(did:str, password:str, remember:bool = False):
     req = RequestFactory().post(
         '/bmgt435-service/api/auth/sign-in',
-        json.dumps({'did':did, 'password':password}),
+        json.dumps({'did':did, 'password':password, 'remember':remember}),
         'application/json'
     )
     resp = AuthApi.sign_in(req)
@@ -493,3 +493,79 @@ class TestManageApi(AppTestCaeBase):
         resp = c.post('/bmgt435-service/api/manage/semester/create', json.dumps({'year':2021, 'season':'fall'}), content_type='application/json')      
         self.assertRejected(resp)
         self.assertEqual(BMGTSemester.objects.count(), 1)
+
+
+def testFoodDeliveryConfigPositive(self):
+    config= {
+        'config_json':[
+            [1, 2],
+            [2, 1],
+            [3, 4],
+            [4, 3],
+            [5, 6],
+            [6, 5],
+        ]
+    }
+    c = Client()
+    c.cookies = SimpleCookie({'id':1})
+    resp = c.post('api/manage/food-delivery-config/update', json.dumps(config), content_type='application/json')
+    self.assertResolved(resp)
+
+
+def testFoodDeliveryConfigNegative(self):
+    config= {
+        'config_json':[
+            [1, 2],
+            [2, 1],
+            [3, 4],
+            [4, 3],
+            [5, 6],
+            [6, 5],
+        ]
+    }
+    c = Client()
+    c.cookies = SimpleCookie({'id':2})
+    resp = c.post('api/manage/food-delivery-config/update', json.dumps(config), content_type='application/json')
+    self.assertRejected(resp)
+
+    c.cookies = SimpleCookie({'id':-1})
+    resp = c.post('api/manage/food-delivery-config/update', json.dumps(config), content_type='application/json')
+    self.assertRejected(resp)
+
+    badConfig = {
+        'config_json':[
+            [1, 2],
+            [2, 1],
+            [3, 4],
+            [4, 3],
+            [5, 6],
+            [6, 5],
+            [7, 8],
+        ]
+    }
+
+    c.cookies = SimpleCookie({'id':1})
+    resp = c.post('api/manage/food-delivery-config/update', json.dumps(badConfig), content_type='application/json')
+    self.assertRejected(resp)
+
+    badConfig2 = {
+        'config_json':[
+            [1, 2],
+            [2, 1],
+            [3, 4],
+            [4, 3],
+            [5, 6],
+            [6, 1],
+        ]
+    }
+    resp = c.post('api/manage/food-delivery-config/update', json.dumps(badConfig2), content_type='application/json')
+    self.assertRejected(resp)
+    
+
+def testCaseConfigIntegrity(self):
+    try:
+        BMGTCaseConfig(case_id=1).save()
+        BMGTCaseConfig(case_id=1).save()
+        self.fail()
+    except IntegrityError:
+        return

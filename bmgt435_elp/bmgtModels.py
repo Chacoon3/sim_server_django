@@ -163,11 +163,10 @@ class BMGTCaseConfig(BMGTModelBase):
     class Meta:
         app_label = APP_LABEL
         constraints = [
-            models.UniqueConstraint(fields=('case_id', 'semester_id'), name='unique_case_config'),
+            models.UniqueConstraint(fields=('case_id',), name='unique_case_config'),
         ]
     
     case = models.ForeignKey(BMGTCase, on_delete=models.CASCADE, null=False)
-    semester = models.ForeignKey(BMGTSemester, on_delete=models.CASCADE, null=False)
     config_json = BMGTJsonField(null=False, default="", unique=False)  # editable configuration regarding a case
     edited_time = models.DateTimeField(auto_created=True, default=timezone.now, null=False)
 
@@ -178,8 +177,6 @@ class BMGTCaseConfig(BMGTModelBase):
             edited_time=timezone.make_naive(self.edited_time).isoformat(sep=' ', timespec='seconds'),
             case_id=self.case.id if self.case else None,
             case_name=self.case.name if self.case else None,
-            semester_id=self.semester.id if self.semester else None,
-            semester_name=self.semester.name if self.semester else None,
             config_json=self.config_json,
         )
 

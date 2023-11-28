@@ -13,7 +13,7 @@ class BMGTUserAdmin(admin.ModelAdmin):
 
 class CaseAdmin(admin.ModelAdmin):
     fieldsets = [
-       ("None",  {"fields": ["name", "max_submission",]}),
+       ("None",  {"fields": ["id", "name", "max_submission",]}),
     ]
 
     list_display = ["id", "name", "create_time", "max_submission", "visible",]
@@ -29,10 +29,10 @@ class CaseRecordAdmin(admin.ModelAdmin):
 
 class CaseConfigAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("None", {"fields": ["case_id", "semester_id", "create_time", "edited_time", "config_json",]}),
+        ("None", {"fields": ["case_id", "create_time", "edited_time", "config_json",]}),
     ]
 
-    list_display = ["id", "case_id", "semester_id", "create_time", "edited_time", "config_json",]
+    list_display = ["id", "case_id", "create_time", "edited_time", "config_json",]
 
 
 class GroupAdmin(admin.ModelAdmin):

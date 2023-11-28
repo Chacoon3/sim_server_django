@@ -33,5 +33,6 @@ EXPOSE 8000
 # CMD python manage.py makemigrations && python manage.py migrate && gunicorn -b 0.0.0.0:8000 sim_server_django.wsgi:application
 CMD python manage.py makemigrations bmgt435_elp && \
     python manage.py migrate && \
-    daphne -b 0.0.0.0 -p 8000 sim_server_django.asgi:application
+    # daphne -b 0.0.0.0 -p 8000 sim_server_django.asgi:application
+    gunicorn -b 0.0.0.0:8000 sim_server_django.wsgi:application -w 4
 # CMD python manage.py makemigrations && python manage.py migrate && python manage.py runserver

@@ -87,6 +87,7 @@ if AppConfig.APP_USE_MYSQL:
             },
         },
     }
+    print('Using MySQL database')
 else:
     DATABASES = {
         'default': {
@@ -94,6 +95,7 @@ else:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+    print('Using SQLite database')
 
 
 # Password validation

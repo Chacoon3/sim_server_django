@@ -8,7 +8,6 @@ from .apps import bmgt435_file_system
 from .simulation import FoodDelivery, SimulationException
 from .bmgtModels import *
 from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
-from .utils.databaseUtils import InMemoryCache
 
 import pandas as pd
 import json
@@ -37,9 +36,14 @@ def _get_session_user(request: HttpRequest) -> BMGTUser:
 
 class AuthApi:
 
+    MAX_AGE_REMEMBER = 60 * 60 * 24 * 7 # 7 days
+
     @staticmethod
-    def __set_auth_cookie(response: HttpResponse, user: BMGTUser) -> None:
-        response.set_cookie('id', str(user.id), samesite='strict', secure=True, httponly=True)
+    def __set_auth_cookie(response: HttpResponse, user: BMGTUser, remember: bool) -> None:
+        if remember:
+            response.set_cookie('id', str(user.id), samesite='strict', secure=True, httponly=True, max_age=AuthApi.MAX_AGE_REMEMBER)
+        else:
+            response.set_cookie('id', str(user.id), samesite='strict', secure=True, httponly=True)
 
     @staticmethod
     def __clear_auth_cookie(response: HttpResponse) -> None:
@@ -54,9 +58,10 @@ class AuthApi:
             data = json.loads(request.body)
             did = data['did']
             password = data['password']
+            remember = data['remember']
             user = BMGTUser.objects.get(did=did, activated=True,)
             if check_password(password, user.password):
-                AuthApi.__set_auth_cookie(resp, user)
+                AuthApi.__set_auth_cookie(resp, user, remember)
                 resp.resolve(user)
             else:
                 resp.reject("Sign in failed. Please check your directory ID and password!")
@@ -289,7 +294,7 @@ class CaseApi:
                     # id to simulation case mapping
                     match case_id:
                         case 1:     # food center
-                            params = data.get('case_params')
+                            params = data['case_params']
                             configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
                             if configQuery.exists():
                                 config = json.loads(configQuery.get().config_json)
@@ -460,7 +465,6 @@ class ManageApi:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
-            semester_id = data['semester_id']
             case_id = FOOD_DELIVERY_CASE_ID
             query = BMGTCaseConfig.objects.filter(case_id=case_id, )
             if query.exists():
@@ -494,8 +498,6 @@ class ManageApi:
         pager_params = pager_params_from_request(request)
         pager_params['case_id'] = FOOD_DELIVERY_CASE_ID
         return generic_paginated_query(BMGTCaseConfig, pager_params)
-
-
 
     @request_error_handler
     @require_GET

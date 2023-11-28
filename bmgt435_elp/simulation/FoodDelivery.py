@@ -358,13 +358,13 @@ class FoodDelivery(CaseBase):
         ]
         for centerwise_df, c_name in zip(arr_df_per_center_statistics, history.keys()):
             # add center name and week index columns
-            centerwise_df['center'] = c_name
+            centerwise_df['hub'] = c_name
             centerwise_df['week'] = range(1, FoodDelivery.__num_weeks + 1)
 
         df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
         
         if self.__config is not None:
-            df_per_center_statistics['center'] = df_per_center_statistics['center'].map(
+            df_per_center_statistics['hub'] = df_per_center_statistics['hub'].map(
                 {v: k for k, v in self.__config.items()}
             )
 

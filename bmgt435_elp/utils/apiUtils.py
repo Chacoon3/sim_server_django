@@ -1,5 +1,5 @@
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, OperationalError
 from django.core.paginator import Paginator, EmptyPage
 from django.http import HttpRequest, HttpResponse
 from http import HTTPStatus
@@ -60,6 +60,10 @@ def request_error_handler(func):
             resp.reject(e.args[0])
 
         except ValueError as e:
+            resp = AppResponse()
+            resp.reject(e.args[0])
+
+        except OperationalError as e:
             resp = AppResponse()
             resp.reject(e.args[0])
             
