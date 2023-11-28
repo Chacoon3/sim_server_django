@@ -110,19 +110,28 @@ class FoodDelivery(CaseBase):
         price = np.round(price, decimals=2)
         return price
     
+    @staticmethod
+    def is_config_valid(config:dict) -> bool:
+        if config is not None:
+            set_keys = set(config.keys())
+            set_values = set(config.values())
+            set_valid_values = set(FoodDelivery.__center_names)
+            input_mapper_valid = (set_keys == set_values and set_keys == set_valid_values and len(set_keys) == len(config.keys())) 
+            return input_mapper_valid
+        return False
 
 
     def __init__(
         self,
         centers: list[str] = [],
         policies: list[tuple[int, int]] | list[list[int]] = [],
-        input_mapper: dict | None = None,
+        config: dict | None = None,
     ):
 
         super().__init__()
         self.__centers = centers
         self.__policies = policies
-        self.__input_mapper = input_mapper
+        self.__config = config
         self._assert_params()
 
     def _assert_params(self) -> None:
@@ -134,13 +143,14 @@ class FoodDelivery(CaseBase):
 
         policy_valid = all([p[0] >= 0 and p[1] > p[0] for p in self.__policies])
 
-        if self.__input_mapper is  not None:
-            s_keys = set(self.__input_mapper.keys())
-            s_values = set(self.__input_mapper.values())
-            s_valid_values = set(FoodDelivery.__center_names)
-            input_mapper_valid = s_keys == s_values and s_keys == s_valid_values
-            if not input_mapper_valid:
-                raise SimulationException("Simulation failed. The input mapper is not valid!")
+        # if self.__config is not None:
+        #     config = self.__config
+        #     set_keys = set(config.keys())
+        #     set_values = set(config.values())
+        #     set_valid_values = set(FoodDelivery.__center_names)
+        #     input_mapper_valid = (set_keys == set_values and set_keys == set_valid_values and len(set_keys) == len(config.keys())) 
+        #     if not input_mapper_valid:
+        #         raise SimulationException("Simulation failed. The input mapper is not valid!")
 
         if not config_valid:
             raise SimulationException(
@@ -336,8 +346,8 @@ class FoodDelivery(CaseBase):
         return output
 
     def run(self):
-        if self.__input_mapper is not None:
-            self.__centers = [self.__input_mapper[c] for c in self.__centers]
+        if self.__config is not None:
+            self.__centers = [self.__config[c] for c in self.__centers]
         
         res = self.simulate()
         score = self.score(res)
@@ -353,9 +363,9 @@ class FoodDelivery(CaseBase):
 
         df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
         
-        if self.__input_mapper is not None:
+        if self.__config is not None:
             df_per_center_statistics['center'] = df_per_center_statistics['center'].map(
-                {v: k for k, v in self.__input_mapper.items()}
+                {v: k for k, v in self.__config.items()}
             )
 
         simRes = FoodDeliveryResult(score, df_aggregated_statistics, df_per_center_statistics)

@@ -8,6 +8,7 @@ from .apps import bmgt435_file_system
 from .simulation import FoodDelivery, SimulationException
 from .bmgtModels import *
 from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
+from .utils.databaseUtils import InMemoryCache
 
 import pandas as pd
 import json
@@ -21,6 +22,7 @@ All requests have been verified to have valid user id except for those of the Au
 
 CASE_RECORD_PATH = bmgt435_file_system.base_location.__str__() + "case_records/"
 MAX_GROUP_SIZE = 4
+FOOD_DELIVERY_CASE_ID = 1
 
 
 def _get_session_user(request: HttpRequest) -> BMGTUser:
@@ -190,21 +192,22 @@ class GroupApi:
     def join_group(request: HttpRequest) -> HttpResponse:
         try:
             resp = AppResponse()
-
             user: BMGTUser = _get_session_user(request)
             data = json.loads(request.body)
             group_id = data['group_id']
             if user.group == None:
-                if user.role == BMGTUser.BMGTUserRole.ADMIN:    # admin can join any group of any semester
-                    group = BMGTGroup.objects.get(id=group_id)
+                group = BMGTGroup.objects.get(id=group_id)
+                if user.role == BMGTUser.BMGTUserRole.USER and user.semester_id != group.semester_id:
+                    resp.reject("You cannot join a group in another semester!")
                 else:
-                    group = BMGTGroup.objects.get(id=group_id, semester=user.semester)
-                if group.users.count() < MAX_GROUP_SIZE:
-                    user.group = group
-                    user.save()
-                    resp.resolve(group)
-                else:
-                    resp.reject("Group already full!")
+                    if group.users.count() >= MAX_GROUP_SIZE:
+                        resp.reject("Group already full!")
+                    elif group.is_frozen:
+                        resp.reject("Cannot join the group at this time!")
+                    else:
+                        user.group = group
+                        user.save()
+                        resp.resolve(group)
             else:
                 resp.reject("Cannot join another group while you are alreay in a group!")
         except BMGTGroup.DoesNotExist:
@@ -222,9 +225,12 @@ class GroupApi:
             resp = AppResponse()
             user: BMGTUser = _get_session_user(request)
             if user.group != None:
-                user.group = None
-                user.save()
-                resp.resolve("Group left!")
+                if user.group.is_frozen:
+                    resp.reject("Cannot leave the group at this time!")
+                else:
+                    user.group = None
+                    user.save()
+                    resp.resolve("Group left!")
             else:
                 resp.reject("You are not in a group!")
         except BMGTUser.DoesNotExist:
@@ -275,7 +281,7 @@ class CaseApi:
             case_record = None # place holder
             user = _get_session_user(request)
             data = json.loads(request.body)
-            case_id = int(data.get('case_id'))
+            case_id = int(data['case_id'])
             case_instance = BMGTCase.objects.get(id=case_id)
             if user.group != None:
                 group = user.group
@@ -284,6 +290,10 @@ class CaseApi:
                     match case_id:
                         case 1:     # food center
                             params = data.get('case_params')
+                            configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
+                            if configQuery.exists():
+                                config = json.loads(configQuery.get().config_json)
+                                params['config'] = config
                             simulation_instance = FoodDelivery(**params)
                         case _:
                             resp.reject("Case not found!")
@@ -446,28 +456,28 @@ class ManageApi:
     @request_error_handler
     @require_POST
     @staticmethod
-    def config_case(request: HttpRequest) -> HttpResponse:
+    def update_food_delivery_config(request: HttpRequest) -> HttpResponse:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
-            case_id = data.get('case_id', None)
-            semester_id = data.get('semester_id', None)
-            query = BMGTCaseConfig.objects.filter(case_id=case_id, semester_id=semester_id)
+            semester_id = data['semester_id']
+            case_id = FOOD_DELIVERY_CASE_ID
+            query = BMGTCaseConfig.objects.filter(case_id=case_id, )
             if query.exists():
                 config = query.get()
             else:
-                config = BMGTCaseConfig(case_id=case_id, semester_id=semester_id)
-            
-            match case_id:
-                case 1:
-                    # food delivery
-                    params = data.get('case_params')
-                    
-                    config.config_json = json.dumps(params)
+                with transaction.atomic():
+                    config = BMGTCaseConfig(case_id=case_id,)
                     config.save()
-                    resp.resolve("Case configured!")
-                case _:
-                    raise BMGTCase.DoesNotExist
+            
+            params = dict(data['config'])
+            if FoodDelivery.is_config_valid(params):
+                config.config_json = json.dumps(params)
+                config.edited_time = timezone.now()
+                config.save()
+                resp.resolve("Case configured!")
+            else:
+                resp.reject("Invalid case configuration!")
             
         except BMGTCase.DoesNotExist:
             resp.reject("Case not found!")
@@ -477,8 +487,15 @@ class ManageApi:
         return resp
     
 
-    def  view_case(request: HttpRequest) -> HttpResponse:
-        pass
+    @request_error_handler
+    @require_GET
+    @staticmethod
+    def  view_food_delivery_config(request: HttpRequest) -> HttpResponse:
+        pager_params = pager_params_from_request(request)
+        pager_params['case_id'] = FOOD_DELIVERY_CASE_ID
+        return generic_paginated_query(BMGTCaseConfig, pager_params)
+
+
 
     @request_error_handler
     @require_GET
@@ -489,24 +506,32 @@ class ManageApi:
     @request_error_handler
     @require_GET
     @staticmethod
-    def system_status(request: HttpRequest) -> HttpResponse:
-        resp = AppResponse()
+    def view_system_state(request: HttpRequest) -> HttpResponse:
+        try:
+            resp = AppResponse()
+            status = BMGTSystemStatus.objects.get(id=1)
+            resp.resolve(status)
+        except BMGTSystemStatus.DoesNotExist:
+            resp.reject("System not found!")
 
-        count_users = BMGTUser.objects.count()
-        count_active_users = BMGTUser.objects.filter(activated=True).count()
-        count_groups = BMGTGroup.objects.count()
-        count_cases = BMGTCase.objects.count()
-        count_case_records = BMGTCaseRecord.objects.count()
-        count_case_records_success = BMGTCaseRecord.objects.filter(state=BMGTCaseRecord.State.SUCCESS).count()
-
-        resp.resolve({
-            "count_users": count_users,
-            "count_activated_users": count_active_users,
-            "count_groups": count_groups,
-            "count_cases": count_cases,
-            "count_case_records": count_case_records,
-            "count_case_records_success": count_case_records_success,
-        })
+        return resp
+    
+    @request_error_handler
+    @require_POST
+    @staticmethod
+    def update_system_state(request: HttpRequest) -> HttpResponse:
+        try:
+            resp = AppResponse()
+            data = json.loads(request.body)
+            system = BMGTSystemStatus.objects.get(id=1)
+            for key, value in data.items():
+                system.__setattr__(key, value)
+            system.save()
+            resp.resolve("System updated!")
+        except BMGTSystemStatus.DoesNotExist:
+            resp.reject("System not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
 
         return resp
     
@@ -541,7 +566,7 @@ class ManageApi:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
-            arr_semester_id = data.get('semester_id', None)
+            arr_semester_id = data['arr_semester_id']
             semester = BMGTSemester.objects.filter(id__in=arr_semester_id)
             semester.delete()
             resp.resolve("Semester deleted!")
@@ -549,6 +574,9 @@ class ManageApi:
             resp.reject("Semester not found!")
         except KeyError:
             resp.reject("Invalid data format!")
+        except IntegrityError:
+            resp.reject("Semester cannot be deleted. Please delete all the users and groups in the semester first!")
+
         return resp
     
     @request_error_handler
@@ -568,12 +596,12 @@ class ManageApi:
     @request_error_handler
     @require_POST
     @staticmethod
-    def batch_create_group(request: HttpRequest) -> HttpResponse:
+    def create_group(request: HttpRequest) -> HttpResponse:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
-            semester_id = data.get('semester_id', None)
-            size = int(data.get('size'))
+            semester_id = data['semester_id']
+            size = int(data['size'])
             semester = BMGTSemester.objects.get(id=semester_id)
             max_group_num = BMGTGroup.objects.aggregate(max_value=Max('number'))['max_value'] or 0
             BMGTGroup.objects.bulk_create(
@@ -602,7 +630,7 @@ class ManageApi:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
-            arr_group_id = data.get('group_id', None)
+            arr_group_id = data.get('arr_group_id', None)
             with transaction.atomic():
                 groups = BMGTGroup.objects.filter(id__in=arr_group_id)
                 groups.delete()

@@ -1,4 +1,23 @@
-from ..bmgtModels import BMGTModelBase
+from typing import Callable
+
+class InMemoryCache:
+
+    def __init__(self):
+        self.__cache = {}
+
+    def get_or_query(self, key, callable: Callable):
+        if self.__cache.get(key) is None:
+            self.__cache[key] = callable()
+        return self.__cache[key]
+
+    def delete(self, key):
+        self.__cache.pop(key, None)
+
+    def clear(self):
+        self.__cache.clear()
+
+    def __str__(self):
+        return str(self.__cache)
 
 class BMGT435_DB_Router:
 

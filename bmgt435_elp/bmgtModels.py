@@ -76,8 +76,9 @@ class BMGTSemester(BMGTModelBase):
 
 class BMGTGroup(BMGTModelBase):
 
+    is_frozen = models.BooleanField(default=False, null=False)  # if true, no user can join this group
     number = models.IntegerField(null=False, unique=False)  # group number
-    semester = models.ForeignKey(BMGTSemester, on_delete=models.CASCADE, null=False)
+    semester = models.ForeignKey(BMGTSemester, on_delete=models.RESTRICT, null=False)
 
     @property
     def users(self) -> QuerySet:
@@ -91,6 +92,7 @@ class BMGTGroup(BMGTModelBase):
         return {
             "id": self.id,
             "name": self.name,
+            "is_frozen": self.is_frozen,
             "users": [user.as_dictionary() for user in self.users],
             "semester_id": self.semester.id if self.semester else None,
             "semester_name": self.semester.name if self.semester else None,
@@ -129,6 +131,7 @@ class BMGTUser(BMGTModelBase):
             id=self.id,
             create_time=self.formatted_create_time,
             did=self.did,
+            activated = self.activated,
             first_name=self.first_name,
             last_name=self.last_name,
             role=self.role,
@@ -147,13 +150,14 @@ class BMGTCase(BMGTModelBase):
     visible = models.BooleanField(default=True, null=False)
     max_submission = models.IntegerField(default=5, null=False, unique=False)
 
-    def as_dictionary(self) -> dict:
+    def as_dictionary(self,) -> dict:
         return dict(
             id=self.id,
             create_time=self.formatted_create_time,
             name=self.name,
         )
     
+
 class BMGTCaseConfig(BMGTModelBase):
 
     class Meta:
@@ -165,11 +169,13 @@ class BMGTCaseConfig(BMGTModelBase):
     case = models.ForeignKey(BMGTCase, on_delete=models.CASCADE, null=False)
     semester = models.ForeignKey(BMGTSemester, on_delete=models.CASCADE, null=False)
     config_json = BMGTJsonField(null=False, default="", unique=False)  # editable configuration regarding a case
+    edited_time = models.DateTimeField(auto_created=True, default=timezone.now, null=False)
 
     def as_dictionary(self) -> dict:
         return dict(
             id=self.id,
             create_time=self.formatted_create_time,
+            edited_time=timezone.make_naive(self.edited_time).isoformat(sep=' ', timespec='seconds'),
             case_id=self.case.id if self.case else None,
             case_name=self.case.name if self.case else None,
             semester_id=self.semester.id if self.semester else None,
@@ -272,3 +278,10 @@ class BMGTFeedback(BMGTModelBase):
             user_name=self.user.name,
             content=self.content,
         )
+    
+
+class BMGTSystemStatus(BMGTModelBase):
+
+    allow_join_group = models.BooleanField(default=True, null=False)
+    allow_user_login = models.BooleanField(default=True, null=False)
+    allow_case_submit = models.BooleanField(default=True, null=False)

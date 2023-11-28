@@ -34,18 +34,19 @@ urlpatterns = [
     path('api/manage/users/import/semester/<int:semester_id>', ManageApi.import_users,),
     path('api/manage/users/view', ManageApi.view_users,),
 
-    path('api/manage/groups/create', ManageApi.batch_create_group,),
+    path('api/manage/groups/create', ManageApi.create_group,),
     path('api/manage/groups/paginated', ManageApi.group_view_paginated,),
     path('api/manage/groups/delete', ManageApi.delete_group,),
 
-    path('api/manage/cases/config', ManageApi.config_case,),
-    path('api/manage/cases/view', ManageApi.view_case,),
+    path('api/manage/food-delivery-config/update', ManageApi.update_food_delivery_config,),
+    path('api/manage/food-delivery-config/view', ManageApi.view_food_delivery_config,),
 
     path('api/manage/semesters/create', ManageApi.create_semester,),
     path('api/manage/semesters/all', ManageApi.get_semesters,),
-    path('api/manage/semesters/delete', ManageApi.get_semesters,),
+    path('api/manage/semesters/delete', ManageApi.delete_semesters,),
 
-    path('api/manage/systems/status', ManageApi.system_status,),
+    path('api/manage/system/view', ManageApi.view_system_state,),
+    path('api/manage/system/update', ManageApi.update_system_state,),
     
     path('api/feedbacks/post', FeedbackApi.post, ),
     path('api/manage/feedbacks/paginated', FeedbackApi.feedback_paginated,),
