@@ -446,8 +446,8 @@ class ManageApi:
                     obj_set = [BMGTUser(semester = semester, **row)
                                 for row in user_csv.to_dict('records')]
 
-                    BMGTUser.objects.bulk_create(obj_set)
-                    resp.resolve(len(obj_set))
+                    created_set = BMGTUser.objects.bulk_create(obj_set)
+                    resp.resolve(f"Imported {len(created_set)} users!")
                 else:
                     resp.reject("Import failed! Please upload a CSV file that contains the following columns: user_first_name, user_last_name, directory_id")
         except IntegrityError:
