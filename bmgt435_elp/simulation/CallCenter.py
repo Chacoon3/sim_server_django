@@ -15,6 +15,10 @@ class Customer:
         for cumProb in Customer.__priorityCumDist:
             if prob <= cumProb:
                 return cumProb
+            
+    @staticmethod
+    def __determineServiceType() -> int:
+        return np.random.choice([1, 2, 3], p=[0.5, 0.3, 0.2])
 
     def __init__(self, arrTime:float) -> None:
         Customer.__id += 1
@@ -24,6 +28,7 @@ class Customer:
         self.__exitTime:float = None
         self.__enqueueTime:float = None
         self.__serviceStartTime:float = None
+        self.__serviceType = Customer.__determineServiceType()
 
     @property
     def id(self) -> int:
@@ -84,6 +89,10 @@ class Customer:
         if self.__exitTime is None:
             return None
         return self.__serviceStartTime - self.__arrivalTime
+    
+    @property
+    def serviceType(self) -> int:
+        return self.__serviceType
 
 
 class AgentSchedule:
@@ -111,6 +120,10 @@ class AgentSchedule:
 
 class Agent:
     __id = -1
+
+    @staticmethod
+    def generateServiceTime() -> float:
+        return np.random.exponential(228.98) + 77.020
 
     def __init__(self, schedule:AgentSchedule, level:int) -> None:
         Agent.__id += 1
@@ -153,10 +166,6 @@ class CallCenter(BaseDiscreteEventCase):
     __schedule1 = AgentSchedule([[0 * 3600, 4 * 3600]])  # 8am to 12pm
     __schedule2 = AgentSchedule([[3 * 3600, 7 * 3600]])  # 11am to 3pm
     __schedule3 = AgentSchedule([[5 * 3600, 9 * 3600]])  # 1pm to 5pm
-
-    @staticmethod
-    def getServiceTime() -> float:
-        return np.random.exponential(228.98) + 77.020
 
     @staticmethod
     def _validateInput(decision:list[int]):
@@ -218,7 +227,7 @@ class ServiceCompletion(BaseDESEvent):
             serviceQueue = system.getServiceQueue()
             if not serviceQueue.empty():
                 customer = serviceQueue.get()
-                serviceTime = CallCenter.getServiceTime()
+                serviceTime = CallCenter.generateServiceTime()
                 leaveTime = system.systemTime + serviceTime
                 serviceEvent = ServiceCompletion(leaveTime, customer, self.__agent)
                 system.tryAddEvent(serviceEvent)
@@ -250,7 +259,7 @@ class Arrival(BaseDESEvent):
             if agent is not None:
                 agent.isBusy = True
                 # start service
-                serviceDuration = system.getServiceTime()
+                serviceDuration = system.generateServiceTime()
                 serviceEndTime = system.systemTime + serviceDuration
                 serviceEvent = ServiceCompletion(serviceEndTime, customer, agent)
                 system.tryAddEvent(serviceEvent)
