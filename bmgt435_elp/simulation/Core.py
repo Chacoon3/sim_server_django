@@ -101,37 +101,34 @@ class BaseDiscreteEventCase(CaseBase):
     """
 
     def __init__(self) -> None:
-        self.__time = 0
-        self.__eventQueue = pQueue()
+        self._time = 0
+        self._eventQueue = pQueue()
         return
     
     @property.setter
     def systemTime(self, time:float):
         if time < 0:
             raise SimulationException("Invalid time. Time cannot be negative!")
-        if time < self.__time:
-            raise SimulationException(f"Invalid time. Time cannot be decreased! Current time: {self.__time}, new time: {time}")
-        self.__time = time
+        if time < self._time:
+            raise SimulationException(f"Invalid time. Time cannot be decreased! Current time: {self._time}, new time: {time}")
+        self._time = time
     
     @property
     def systemTime(self):
-        return self.__time
+        return self._time
     
     def shouldStop(self) -> bool:
         raise NotImplementedError()
     
     def run(self):
-        while not (self.shouldStop() or self.__eventQueue.empty()):
-            event = self.__eventQueue.get()
+        while not (self.shouldStop() or self._eventQueue.empty()):
+            event = self._eventQueue.get()
             self.systemTime = event.time
             event.execute(self)
         return
     
-    def addEvent(self, event):
-        if event.time < self.__time:
-            raise SimulationException(f"Invalid event time. Event time cannot be earlier than current time! Current time: {self.__time}, event time: {event.time}")
-        self.__eventQueue.put(event)
-        return
+    def tryAddEvent(self, event) -> bool:
+        raise NotImplementedError()
 
 
 class BaseDESEvent:
@@ -149,5 +146,4 @@ class BaseDESEvent:
         return self.__time
 
     def execute(self, systemState:BaseDiscreteEventCase):
-        if systemState is None:
-            raise SimulationException("Invalid system state. System state cannot be None!")
+        raise NotImplementedError()
