@@ -2,7 +2,6 @@ import io
 import numpy as np
 import pandas as pd
 from queue import PriorityQueue as pQueue
-import scipy.stats
 from .Core import SimulationException, SimulationResult, BaseDiscreteEventCase, BaseDESEvent    
 
 
@@ -11,7 +10,7 @@ class Customer:
     __priorityCumDist = [0.03, 0.06, 0.57, 0.98, 1.  ]
 
     @staticmethod
-    def determinePriority() -> int:
+    def __determinePriority() -> int:
         prob = np.random.random()
         for cumProb in Customer.__priorityCumDist:
             if prob <= cumProb:
@@ -20,21 +19,72 @@ class Customer:
     def __init__(self, arrTime:float) -> None:
         Customer.__id += 1
         self.__id = Customer.__id
-        self.__priority = Customer.determinePriority()
+        self.__priority = Customer.__determinePriority()
         self.__arrivalTime = arrTime
+        self.__exitTime:float = None
+        self.__enqueueTime:float = None
+        self.__serviceStartTime:float = None
 
     @property
-    def id(self):
+    def id(self) -> int:
         return self.__id
     
     @property
-    def priority(self):
+    def priority(self) -> int:
         return self.__priority
     
     @property
-    def arrivalTime(self):
+    def arrivalTime(self) -> float | None:
         return self.__arrivalTime
     
+    @property
+    def exitTime(self) -> float | None:
+        return self.__exitTime
+
+    @exitTime.setter
+    def exitTime(self, value:float):
+        if self.__exitTime is not None:
+            raise SimulationException("Invalid exit time. Customer has already exited!")
+        if value < self.__arrivalTime:
+            raise SimulationException("Invalid exit time. Exit time cannot be less than arrival time!")
+        self.__exitTime = value
+    
+    @property
+    def enqueueTime(self) -> float | None:
+        return self.__enqueueTime
+    
+    @enqueueTime.setter
+    def enqueueTime(self, value:float):
+        if self.__enqueueTime is not None:
+            raise SimulationException("Invalid enqueue time. Customer has already enqueued!")
+        if value < self.__arrivalTime:
+            raise SimulationException("Invalid enqueue time. Enqueue time cannot be less than arrival time!")
+        self.__enqueueTime = value
+
+    @property
+    def serviceStartTime(self) -> float | None:
+        return self.__serviceStartTime
+    
+    @serviceStartTime.setter
+    def serviceStartTime(self, value:float):
+        if self.__serviceStartTime is not None:
+            raise SimulationException("Invalid dequeue time. Customer has already dequeued!")
+        if value < self.__enqueueTime:
+            raise SimulationException("Invalid dequeue time. Dequeue time cannot be less than enqueue time!")
+        self.__serviceStartTime = value
+
+    @property
+    def waitTime(self) -> float | None:
+        if self.__enqueueTime is None or self.__serviceStartTime is None:
+            return None
+        return self.__serviceStartTime - self.__enqueueTime
+    
+    @property
+    def serviceTime(self) -> float | None:
+        if self.__exitTime is None:
+            return None
+        return self.__serviceStartTime - self.__arrivalTime
+
 
 class AgentSchedule:
 
@@ -91,7 +141,7 @@ class Agent:
     def isBusy(self):
         return self.__isBusy
 
-    @property.setter
+    @isBusy.setter
     def isBusy(self, value:bool):
         self.__isBusy = value
     
@@ -107,7 +157,6 @@ class CallCenter(BaseDiscreteEventCase):
     @staticmethod
     def getServiceTime() -> float:
         return np.random.exponential(228.98) + 77.020
-
 
     @staticmethod
     def _validateInput(decision:list[int]):
@@ -173,9 +222,6 @@ class ServiceCompletion(BaseDESEvent):
                 leaveTime = system.systemTime + serviceTime
                 serviceEvent = ServiceCompletion(leaveTime, customer, self.__agent)
                 system.tryAddEvent(serviceEvent)
-                return
-        else:
-            return         
 
     def __str__(self) -> str:
         return f"LeaveEvent(time={self.time}"
