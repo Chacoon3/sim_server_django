@@ -85,7 +85,6 @@ class CaseBase(object):
     def run(self, num_iterations=100) -> SimulationResult:
         '''
         run the simulation case with specified number of iterations
-        ouutput_style should decide whether detailed or simplified simulation statistics should be returned
         '''
         raise NotImplementedError()
     
@@ -96,27 +95,59 @@ class CaseBase(object):
         raise NotImplementedError()
 
 
-class CaseDES(CaseBase):
+class BaseDiscreteEventCase(CaseBase):
     """
-    base class of all descrete event simulation cases
+    abstraction of the state of the system being simulated
     """
 
-    def __init__(self,  stopCondition) -> None:
-        self.__pQueue = pQueue()  # event queue
-        self.__t = 0    # timer
-        self.__shouldStop = stopCondition
+    def __init__(self) -> None:
+        self.__time = 0
+        self.__eventQueue = pQueue()
+        return
+    
+    @property.setter
+    def systemTime(self, time:float):
+        if time < 0:
+            raise SimulationException("Invalid time. Time cannot be negative!")
+        if time < self.__time:
+            raise SimulationException(f"Invalid time. Time cannot be decreased! Current time: {self.__time}, new time: {time}")
+        self.__time = time
+    
+    @property
+    def systemTime(self):
+        return self.__time
+    
+    def shouldStop(self) -> bool:
+        raise NotImplementedError()
+    
+    def run(self):
+        while not (self.shouldStop() or self.__eventQueue.empty()):
+            event = self.__eventQueue.get()
+            self.systemTime = event.time
+            event.execute(self)
+        return
+    
+    def addEvent(self, event):
+        if event.time < self.__time:
+            raise SimulationException(f"Invalid event time. Event time cannot be earlier than current time! Current time: {self.__time}, event time: {event.time}")
+        self.__eventQueue.put(event)
+        return
 
-    def run(self, ):
-        while not (self.__shouldStop() or self.__pQueue.empty()):
-            event = self.__pQueue.get()
-            self.__t = event.time()
-            if self.__shouldStop():     # check stop condition after updating system time
-                break
-            else:
-                event.execute()
 
-    def addEvent(self, event) -> None:
-        self.__pQueue.put((event.time, event))
+class BaseDESEvent:
+    """
+    base class for all discrete event simulation events
+    """
 
-    def getTime(self) -> float:
-        return self.__t
+    def __init__(self, time:float) -> None:
+        if time < 0:
+            raise SimulationException("Invalid time. Time cannot be negative!")
+        self.__time = time
+
+    @property
+    def time(self):
+        return self.__time
+
+    def execute(self, systemState:BaseDiscreteEventCase):
+        if systemState is None:
+            raise SimulationException("Invalid system state. System state cannot be None!")
