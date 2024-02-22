@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 from .Core import CaseBase, SimulationException, SimulationResult
+from typing import Union
 
 
 class FoodDeliveryResult(SimulationResult):
@@ -124,17 +125,17 @@ class FoodDelivery(CaseBase):
     def __init__(
         self,
         centers: list[str] = [],
-        policies: list[tuple[int, int]] | list[list[int]] = [],
-        config: dict | None = None,
+        policies: list[list[int]] = [],
+        config: Union[dict, None] = None,
     ):
 
         super().__init__()
         self.__centers = centers
         self.__policies = policies
         self.__config = config
-        self._assert_params()
+        self.__assert_params()
 
-    def _assert_params(self) -> None:
+    def __assert_params(self) -> None:
         config_valid = self.__num_iterations > 0 and self.__num_weeks > 0
 
         format_valid = len(self.__centers) == len(self.__policies) and len(self.__centers) > 0
@@ -169,11 +170,11 @@ class FoodDelivery(CaseBase):
     perf_upper_bound = 1200000
 
 
-    def score(self, obj) -> float:
+    def score(self, iterationStats) -> float:
         """
         returns the score of the simulation
         """
-        avg_profit = obj['perf_metric']
+        avg_profit = iterationStats['perf_metric']
         avg_profit = (avg_profit - FoodDelivery.perf_lower_bound) / \
             (FoodDelivery.perf_upper_bound - FoodDelivery.perf_lower_bound)
         avg_profit = 1 / (1 + np.exp(-avg_profit))
@@ -181,13 +182,7 @@ class FoodDelivery(CaseBase):
         return avg_profit
     
 
-    def meta_data(self):
-        return {
-            'num_iterations': self.__num_iterations,
-            'num_weeks': self.__num_weeks,
-        }
-
-    def simulate(self):
+    def simulate(self) -> object:
         # instantialize centers
         centers = [
             FoodDelivery.DeliveryHub(policy=policy, initial_inventory=FoodDelivery.__initial_inventory, name=center) for \

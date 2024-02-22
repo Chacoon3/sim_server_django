@@ -64,21 +64,16 @@ class CaseBase(object):
     def __init__(self,) -> None:
         return
 
-    def _assert_params(self) -> None:
-        """
-        should be called in the initiator of all subclasses
-        """
-        raise NotImplementedError()
-
-    def score(self, obj) -> float:
+    def score(self, iterationStats) -> float:
         """
         returns the score of the simulation
         """
         raise NotImplementedError()
 
-    def simulate(self, ):
+    def simulate(self) -> object:
         '''
-        the logic of one iteration in this simulation case
+        the logic of one iteration in this simulation case.\n
+        returns an object storing the result of the iteration
         '''
         raise NotImplementedError()
 
@@ -87,15 +82,9 @@ class CaseBase(object):
         run the simulation case with specified number of iterations
         '''
         raise NotImplementedError()
-    
-    def meta_data(self):
-        """
-        should return a dictionary object describing the parameters of the case
-        """
-        raise NotImplementedError()
 
 
-class BaseDiscreteEventCase(CaseBase):
+class BaseDiscreteEventSimulator(CaseBase):
     """
     abstraction of the state of the system being simulated
     """
@@ -104,8 +93,12 @@ class BaseDiscreteEventCase(CaseBase):
         self._time = 0
         self._eventQueue = pQueue()
         return
-    
-    @property.setter
+  
+    @property
+    def systemTime(self) -> float:
+        return self._time
+      
+    @systemTime.setter
     def systemTime(self, time:float):
         if time < 0:
             raise SimulationException("Invalid time. Time cannot be negative!")
@@ -113,37 +106,34 @@ class BaseDiscreteEventCase(CaseBase):
             raise SimulationException(f"Invalid time. Time cannot be decreased! Current time: {self._time}, new time: {time}")
         self._time = time
     
-    @property
-    def systemTime(self):
-        return self._time
-    
     def shouldStop(self) -> bool:
+        """
+        determine if the DES simulator should stop
+        """
         raise NotImplementedError()
-    
-    def run(self):
-        while not (self.shouldStop() or self._eventQueue.empty()):
-            event = self._eventQueue.get()
-            self.systemTime = event.time
-            event.execute(self)
-        return
     
     def tryAddEvent(self, event) -> bool:
         raise NotImplementedError()
-
+    
 
 class BaseDESEvent:
     """
     base class for all discrete event simulation events
     """
 
-    def __init__(self, time:float) -> None:
+    def __init__(self, time:float, system: BaseDiscreteEventSimulator) -> None:
         if time < 0:
             raise SimulationException("Invalid time. Time cannot be negative!")
         self.__time = time
+        self.__system = system
 
     @property
     def time(self):
         return self.__time
+    
+    @property
+    def system(self):
+        return self.__system
 
-    def execute(self, systemState:BaseDiscreteEventCase):
+    def execute(self, system:BaseDiscreteEventSimulator):
         raise NotImplementedError()
