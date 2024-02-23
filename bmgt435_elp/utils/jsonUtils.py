@@ -7,7 +7,6 @@ import json
 import datetime
 
 
-
 class CustomJSONEncoder(json.JSONEncoder):
 
     typeMapper = {
@@ -17,7 +16,7 @@ class CustomJSONEncoder(json.JSONEncoder):
         models.QuerySet: lambda obj: [model.as_dictionary() for model in obj],
         list[BMGTModelBase]: lambda obj: [model.as_dictionary() for model in obj],
         BMGTModelBase: lambda obj: obj.as_dictionary(),
-        SimulationResult: lambda obj: obj.iteration_dataframe,
+        # SimulationResult: lambda obj: obj.iteration_dataframe,
         BMGTJsonField: lambda obj : json.loads(obj),  # for json encoded data, first decode it to dict, then encode it again
     }
 
@@ -30,6 +29,7 @@ class CustomJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
+
 def serialize_models(querySet: models.QuerySet | list[BMGTModelBase]) -> str:
     return json.dumps([model.as_dictionary() for model in querySet], cls=CustomJSONEncoder)
 
@@ -37,4 +37,4 @@ def serialize_model_instance(instance:BMGTModelBase) -> str:
     return json.dumps(instance.as_dictionary(), cls=CustomJSONEncoder)
 
 def serialize_simulation_result(result: SimulationResult) -> str:
-    return json.dumps(result.iteration_dataframe, cls=CustomJSONEncoder)
+    return json.dumps(result.iterationData, cls=CustomJSONEncoder)

@@ -314,10 +314,10 @@ class CaseApi:
 
                     # run simulation
                     res = simulation_instance.run()
-                    case_detail_bytes = res.detail_as_excel_stream()
-                    case_summary = res.summary_as_dict()
-                    case_record.summary_dict = case_summary
-                    bmgt435_file_system.save(CASE_RECORD_PATH + case_record.file_name, case_detail_bytes)
+                    caseRecordFile = res.asFileStream()
+                    caseSummary = res.asDict()
+                    case_record.summary_dict = caseSummary
+                    bmgt435_file_system.save(CASE_RECORD_PATH + case_record.file_name, caseRecordFile)
                     case_record.state = BMGTCaseRecord.State.SUCCESS
                     case_record.score = res.score
                     case_record.save()

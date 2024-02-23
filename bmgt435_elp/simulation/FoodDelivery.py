@@ -9,16 +9,16 @@ from typing import Union
 
 class FoodDeliveryResult(SimulationResult):
 
-    def detail_as_excel_stream(self):
+    def asFileStream(self) -> io.BytesIO:
         wb = openpyxl.Workbook(write_only=True)
         main_sheet = wb.create_sheet('main')
-        main_sheet.append(self.aggregation_dataframe.columns.tolist())
-        for row in self.aggregation_dataframe.values.tolist():
+        main_sheet.append(self.summaryData.columns.tolist())
+        for row in self.summaryData.values.tolist():
             main_sheet.append(row)
         
         detail_sheet = wb.create_sheet('detail')
-        detail_sheet.append(self.iteration_dataframe.columns.tolist())
-        for row in self.iteration_dataframe.values.tolist():
+        detail_sheet.append(self.iterationData.columns.tolist())
+        for row in self.iterationData.values.tolist():
             detail_sheet.append(row)
     
         bytes_io = io.BytesIO()
@@ -27,8 +27,8 @@ class FoodDeliveryResult(SimulationResult):
         return bytes_io
     
 
-    def summary_as_dict(self):
-        return self.aggregation_dataframe.loc[0,].to_dict()
+    def asDict(self) -> dict:
+        return self.summaryData.loc[0,].to_dict()
 
 
 class FoodDelivery(CaseBase):
@@ -90,6 +90,8 @@ class FoodDelivery(CaseBase):
     __initial_inventory: int = 1000
     __max_weekly_restock: int = 7000
     __num_iterations: int = 1
+    perf_lower_bound: float = -1600000
+    perf_upper_bound: float = 1600000
 
     @staticmethod
     def __sim_center_demand():
@@ -166,14 +168,12 @@ class FoodDelivery(CaseBase):
             raise SimulationException(
                 "Simulation failed. s policy must be non-negative and S policy must be greater than s policy")
 
-    perf_lower_bound = -800000
-    perf_upper_bound = 1200000
-
 
     def score(self, iterationStats) -> float:
         """
         returns the score of the simulation
         """
+
         avg_profit = iterationStats['perf_metric']
         avg_profit = (avg_profit - FoodDelivery.perf_lower_bound) / \
             (FoodDelivery.perf_upper_bound - FoodDelivery.perf_lower_bound)
