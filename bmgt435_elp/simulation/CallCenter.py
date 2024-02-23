@@ -257,6 +257,7 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
         # should be multiplied by the estimated total dailly arrivals to get the arrival rate for each slot
     __estimatedDailyTotalArrivals: float = 534
     __timeSlotLengthInSec: float = 1800  # 30 minutes
+    __lv1AgentsCount: int = 15
 
     @staticmethod
     def __validateInput(decision:list[int]):
@@ -265,6 +266,8 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
                 raise SimulationException("Invalid decision. Decision cannot be negative!")
             if d > 10:
                 raise SimulationException("Invalid decision. Decision cannot be greater than 5!")
+        if sum(decision) > CallCenterSimulator.__lv1AgentsCount:
+            raise SimulationException(f"Invalid decision. Total number of agents cannot be greater than {CallCenterSimulator.__lv1AgentsCount}!")
             
     @staticmethod
     def __validateArrivalRate():
@@ -361,9 +364,14 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
         return round(totalServiceTime / totalScheduleTime * 100, 4)
     
 
-    def simulate(self) -> IterationStats:
-        print("Simulating...")
+    def reset(self):
+        self._eventQueue.clear()
+        self.__customerQueue.clear()
+        self.__customers.clear()
+        self._time = 0
 
+
+    def simulate(self) -> IterationStats:
         # create initial arrival
         initialArrival = Arrival(0, self)
         self.addEvent(initialArrival)
@@ -371,10 +379,11 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
         # assign on schedule events to agents who start working at a later time
         for agents in self.__agents:
             for agent in agents:
-                agentStartTime = agent.schedule.schedule[0][0]
-                if agentStartTime != 0:
-                    agentOnSchedule = AgentOnSchedule(agentStartTime, agent, self)
-                    self.addEvent(agentOnSchedule)
+                startTimes = [interval[0] for interval in agent.schedule.schedule]
+                for t in startTimes:
+                    if t > 0:
+                        agentOnSchedule = AgentOnSchedule(t, agent, self)
+                        self.addEvent(agentOnSchedule)
 
         while not self.shouldStop():
             event: BaseDESEvent = self._eventQueue.get()
@@ -398,12 +407,7 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
         stats.customerArrived = len(self.__customers)
         stats.customerServed = len([c for c in self.__customers if c.serviceTime is not None])
 
-        print("Simulation completed!")
-
-        # the logic of one ieration is fully captured by the event queue and the customer queue
-        # reset them so next iteration can start with a clean state
-        self._eventQueue.clear()
-        self.__customerQueue.clear()
+        self.reset()    # reset the state of the instance so that next iteration can be executed without errors
         return stats
   
    
@@ -503,9 +507,6 @@ class ServiceCompletion(BaseDESEvent):
                 customer: Customer = serviceQueue.get()
                 _serveCustomerHelper(customer, self.__agent, self.__system)
 
-    def __str__(self) -> str:
-        return f"LeaveEvent(time={self.time}"
-
 
 class Arrival(BaseDESEvent):
 
@@ -536,7 +537,3 @@ class Arrival(BaseDESEvent):
             else:
                 # wait in queue
                 customerQueue.add(offerType, customer)
-                
-    def __str__(self) -> str:
-        return f"ArrivalEvent(time={self.time}"
-    
