@@ -19,13 +19,20 @@ class Customer:
     @staticmethod
     def __determineOfferType() -> int:
         prob = np.random.random()
-        for cumProb in Customer.__priorityCumDist:
+        for index in range(len(Customer.__priorityCumDist)):
+            cumProb = Customer.__priorityCumDist[index]
             if prob <= cumProb:
-                return cumProb
+                return index
             
     @staticmethod
     def __determineServiceType() -> int:
-        return np.random.choice([1, 2, 3], p=[0.5, 0.3, 0.2])
+        p = np.random.random()
+        if p < 0.5:
+            return 1
+        elif p < 0.8:
+            return 2
+        else:
+            return 3
 
     def __init__(self, arrTime:float) -> None:
         Customer.__id += 1
@@ -175,8 +182,10 @@ class Agent:
 
     @totalServiceTime.setter
     def totalServiceTime(self, value:float):
-        if value < 0 or value < self.__totalServiceTime:
+        if value < 0:
             raise SimulationException("Invalid total service time. Total service time cannot be negative!")
+        if value < self.__totalServiceTime:
+            raise SimulationException("Invalid total service time. Total service time cannot be decreased!")
         self.__totalServiceTime = value
 
     @property
@@ -293,15 +302,16 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
     def __init__(self, decision:list[int]) -> None:
         super().__init__()
         self.__validateInput(decision)
+        self.__decision = decision
         self.__validateArrivalRate()
         self.__customers = list[Customer]() # records all customers
         self.__endTime = 3600 * 9  # 9 hours
         self.__customerQueue = AppPriorityQueue()  # priority queues for customers
 
         # add lv1 agents of different schedules
-        lv1Agents = [Agent(CallCenterSimulator.__schedule1, 0) for _ in range(decision[0])]
-        lv1Agents.extend([Agent(CallCenterSimulator.__schedule2, 0) for _ in range(decision[1])])
-        lv1Agents.extend([Agent(CallCenterSimulator.__schedule3, 0) for _ in range(decision[2])])
+        lv1Agents = [Agent(CallCenterSimulator.__schedule1, 0) for _ in range(self.__decision[0])]
+        lv1Agents.extend([Agent(CallCenterSimulator.__schedule2, 0) for _ in range(self.__decision[1])])
+        lv1Agents.extend([Agent(CallCenterSimulator.__schedule3, 0) for _ in range(self.__decision[2])])
         self.__agents = [
             lv1Agents,  # currently include only lv1 agents
             list[Agent](),  # lv2 agents
@@ -368,6 +378,17 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
         self._eventQueue.clear()
         self.__customerQueue.clear()
         self.__customers.clear()
+
+        # add lv1 agents of different schedules
+        lv1Agents = [Agent(CallCenterSimulator.__schedule1, 0) for _ in range(self.__decision[0])]
+        lv1Agents.extend([Agent(CallCenterSimulator.__schedule2, 0) for _ in range(self.__decision[1])])
+        lv1Agents.extend([Agent(CallCenterSimulator.__schedule3, 0) for _ in range(self.__decision[2])])
+        self.__agents = [
+            lv1Agents,  # currently include only lv1 agents
+            list[Agent](),  # lv2 agents
+            list[Agent](),  # lv3 agents
+        ]
+        
         self._time = 0
 
 
@@ -401,7 +422,7 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
         stats.maxWaitTime = np.max([c.waitTime for c in self.__customers if c.waitTime is not None]),
         stats.avgWaitTime = np.mean([c.waitTime for c in self.__customers if c.waitTime is not None])
 
-        stats.qualityOfService = self.qualityOfService(300)
+        stats.qualityOfService = self.qualityOfService(60)
         stats.agentUtilizationRate = self.agentUtilizationRate()
 
         stats.customerArrived = len(self.__customers)
