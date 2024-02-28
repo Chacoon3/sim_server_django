@@ -1,7 +1,7 @@
 import io
 import numpy as np
 import pandas as pd
-from .Core import SimulationException, SimulationResult, BaseDiscreteEventSimulator, BaseDESEvent, AppPriorityQueue
+from .Core import SimulationException, SimulationResult, DiscreteEventCase, BaseDESEvent, AppPriorityQueue
 from typing import Union
 
 """
@@ -122,38 +122,27 @@ class Customer:
     @property
     def serviceType(self) -> int:
         return self.__serviceType
-
-
-class AgentSchedule:
-    """
-    nested list to store the schedule of an agent. Each inner list represents a time interval.
-    """
-
-    def __init__(self, schedule:list[list[float]]) -> None:
-        # validate
-        prev = None
-        for s in schedule:
-            if len(s) != 2:
-                raise SimulationException("Invalid schedule. Each schedule must have two elements!")
-            if s[0] < 0 or s[1] < 0:
-                raise SimulationException("Invalid schedule. Schedule cannot have negative values!")
-            if s[0] > s[1]:
-                raise SimulationException("Invalid schedule. Start time cannot be greater than end time!")
-            if prev is not None and s[0] < prev:
-                raise SimulationException("Invalid schedule. Start time cannot be less than the previous end time!")
-            prev = s[1]
-
-        self.__schedule = schedule
-
-    @property
-    def schedule(self) -> list[list[float]]:
-        return self.__schedule
     
 
 class Agent:
     __id = -1
 
-    def __init__(self, schedule:AgentSchedule, level:int) -> None:
+    @staticmethod
+    def __validateSchedule(schedule:list[list[float]]):
+            prev = None
+            for s in schedule:
+                if len(s) != 2:
+                    raise SimulationException("Invalid schedule. Each schedule must have two elements!")
+                if s[0] < 0 or s[1] < 0:
+                    raise SimulationException("Invalid schedule. Schedule cannot have negative values!")
+                if s[0] > s[1]:
+                    raise SimulationException("Invalid schedule. Start time cannot be greater than end time!")
+                if prev is not None and s[0] < prev:
+                    raise SimulationException("Invalid schedule. Start time cannot be less than the previous end time!")
+                prev = s[1]
+
+    def __init__(self, schedule:list[list[float]], level:int) -> None:
+        Agent.__validateSchedule(schedule)
         Agent.__id += 1
         self.__id = Agent.__id
         self.__level = level
@@ -170,7 +159,7 @@ class Agent:
         return self.__level
     
     @property
-    def schedule(self):
+    def schedule(self) -> list[list[float]]:
         return self.__schedule
     
     @property
@@ -193,13 +182,13 @@ class Agent:
         """
         total time the agent has been scheduled to work.
         """
-        return sum([s[1] - s[0] for s in self.__schedule.schedule])
+        return sum([s[1] - s[0] for s in self.__schedule])
         
     def isOnSchedule(self, time:float) -> bool:
         """
         tells if the agent is on schedule at the given time.
         """
-        for s in self.__schedule.schedule:
+        for s in self.__schedule:
             if s[0] <= time < s[1]:
                 return True
         return False
@@ -228,7 +217,7 @@ class CallCenterResult(SimulationResult):
         raise NotImplementedError()
 
 
-class CallCenterSimulator(BaseDiscreteEventSimulator):
+class CallCenterCase(DiscreteEventCase):
     """
     systemTime: float, refers to the current time in the simulation, measured by seconds, starting at 0.
     """
@@ -256,9 +245,9 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
 
     # schedule is represented as a nested list. Each inner list represents a time interval.
     # an agent may work during multiple time intervals in a day
-    __schedule1 = AgentSchedule([[0 * 3600, 4 * 3600]])  # 8am to 12pm
-    __schedule2 = AgentSchedule([[3 * 3600, 7 * 3600]])  # 11am to 3pm
-    __schedule3 = AgentSchedule([[5 * 3600, 9 * 3600]])  # 1pm to 5pmwe
+    __schedule1 = [[0 * 3600, 4 * 3600]]  # 8am to 12pm
+    __schedule2 = [[3 * 3600, 7 * 3600]]  # 11am to 3pm
+    __schedule3 = [[5 * 3600, 9 * 3600]]  # 1pm to 5pmwe
     __arrivalRateWeightBySlot = [
         0.0391, 0.0901, 0.0781, 0.0641, 0.0981, 0.0811, 0.024, 0.03, 0.0451, 0.019, 0.03, 0.0701, 0.0751, 0.0776, 0.0861,
         0.032, 0.026, 0.0381
@@ -268,21 +257,21 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
     __timeSlotLengthInSec: float = 1800  # 30 minutes
     __lv1AgentsCount: int = 15
 
+    __TypeDecomposition = list[tuple[list[list[int]], int]]
+
     @staticmethod
     def __validateInput(decision:list[int]):
-        for d in decision:
-            if d < 0:
+        for numberOfAgents in decision:
+            if numberOfAgents < 0:
                 raise SimulationException("Invalid decision. Decision cannot be negative!")
-            if d > 10:
+            if numberOfAgents > 10:
                 raise SimulationException("Invalid decision. Decision cannot be greater than 5!")
-        if sum(decision) > CallCenterSimulator.__lv1AgentsCount:
-            raise SimulationException(f"Invalid decision. Total number of agents cannot be greater than {CallCenterSimulator.__lv1AgentsCount}!")
             
     @staticmethod
     def __validateArrivalRate():
-        if len(CallCenterSimulator.__arrivalRateWeightBySlot) != 18:
+        if len(CallCenterCase.__arrivalRateWeightBySlot) != 18:
             raise SimulationException("Invalid arrival rate. Arrival rate must have 18 elements!")
-        for rate in CallCenterSimulator.__arrivalRateWeightBySlot:
+        for rate in CallCenterCase.__arrivalRateWeightBySlot:
             if rate < 0 or rate > 100:
                 raise SimulationException("Invalid arrival rate. Arrival rate should be within [0, 100]!")
             
@@ -292,32 +281,80 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
     
     @staticmethod
     def generateInterArrivalTime(currentTime: float) -> float:
-        slotLength = CallCenterSimulator.__timeSlotLengthInSec
+        slotLength = CallCenterCase.__timeSlotLengthInSec
         timeSlot = int(currentTime // slotLength)
-        if timeSlot < 0 or timeSlot > len(CallCenterSimulator.__arrivalRateWeightBySlot):
+        if timeSlot < 0 or timeSlot > len(CallCenterCase.__arrivalRateWeightBySlot):
             raise SimulationException(f"Invalid arrival rate. Arrival rate index out of range! systime: {currentTime}")
-        arrRate = CallCenterSimulator.__arrivalRateWeightBySlot[timeSlot] * CallCenterSimulator.__estimatedDailyTotalArrivals 
+        arrRate = CallCenterCase.__arrivalRateWeightBySlot[timeSlot] * CallCenterCase.__estimatedDailyTotalArrivals 
         return np.random.exponential(slotLength / arrRate) # time conversion from half hour to seconds
 
+    @staticmethod
+    def __minGreaterThan(arr:list[int], than: int) -> int:
+        """
+        returns the minimum non-zero value in the array
+        """
+        minVal = float("inf")
+        for v in arr:
+            if v > than and v < minVal:
+                minVal = v
+        return minVal
+    
+    @staticmethod
+    def __validateDecomposition(decision:list[int], decomposition:__TypeDecomposition) -> bool:
+        """
+        checks if the decomposition is valid
+        """
+        sumTime = sum(decision)
+        actualSumTime = 0
+        for schedule, num in decomposition:
+            scheduleTimeSum = sum([(interval[1] - interval[0]) / CallCenterCase.__timeSlotLengthInSec for interval in schedule]) * num
+            actualSumTime += scheduleTimeSum
+        assert sumTime == actualSumTime, f"Failed to validate decomposition. Expected {sumTime}, actual {actualSumTime}!"
+            
+
+    @staticmethod
+    def convertToSchedule(decision:list[int]) -> __TypeDecomposition:
+        """
+        converts decision, which is a list of integers representing the number of agents at each timeslot into a list of tuples. \n
+        Each tuple contains a list of intervals and the number of agents working during those intervals.
+        """
+        res = CallCenterCase.__TypeDecomposition()
+        maxVal = max(decision)
+        prevLevel = 0
+        currentLevel = CallCenterCase.__minGreaterThan(decision, 0)
+        length = len(decision)
+        while currentLevel <= maxVal:
+            start, end = 0, length
+            intervalSet = list[list[int]]()
+            while start < end:
+                if decision[start]>=currentLevel:
+                    interval = [start * CallCenterCase.__timeSlotLengthInSec]
+                    while start < end and decision[start] >= currentLevel:
+                        start += 1
+                    interval.append(start * CallCenterCase.__timeSlotLengthInSec)
+                    intervalSet.append(interval)
+                start += 1
+            res.append((intervalSet, currentLevel - prevLevel))
+            prevLevel = currentLevel
+            currentLevel = CallCenterCase.__minGreaterThan(decision, currentLevel)
+        CallCenterCase.__validateDecomposition(decision, res)
+        return res
+
+    
     def __init__(self, decision:list[int]) -> None:
+        """
+        decision: list of integers, representing the number of lv 1agents at each time slot
+        """
         super().__init__()
         self.__validateInput(decision)
         self.__decision = decision
+        self.__schedules = self.convertToSchedule(self.__decision)
         self.__validateArrivalRate()
-        self.__customers = list[Customer]() # records all customers
         self.__endTime = 3600 * 9  # 9 hours
+        self.__customers = list[Customer]() # records all customers
         self.__customerQueue = AppPriorityQueue()  # priority queues for customers
-
-        # add lv1 agents of different schedules
-        lv1Agents = [Agent(CallCenterSimulator.__schedule1, 0) for _ in range(self.__decision[0])]
-        lv1Agents.extend([Agent(CallCenterSimulator.__schedule2, 0) for _ in range(self.__decision[1])])
-        lv1Agents.extend([Agent(CallCenterSimulator.__schedule3, 0) for _ in range(self.__decision[2])])
-        self.__agents = [
-            lv1Agents,  # currently include only lv1 agents
-            list[Agent](),  # lv2 agents
-            list[Agent](),  # lv3 agents
-        ]
-        
+        self.__agents = [list[Agent]() for _ in range(3)]  # empty lists for lv1, lv2, lv3 agents
+  
 
     def shouldStop(self) -> bool:
         return self._eventQueue.empty() or self.systemTime >= self.__endTime
@@ -333,7 +370,6 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
     def customerQueue(self) -> AppPriorityQueue:
         return self.__customerQueue
     
-    
     def getIdelAgent(self) -> Union[Agent, None]:
         for lv in range(3):
             agentsArr = self.__agents[lv]
@@ -341,7 +377,6 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
                 if agent.isOnSchedule(self.systemTime) and not agent.isBusy:
                     return agent
         return None
-
 
     def addEvent(self, event:BaseDESEvent):
         if event.time < self.systemTime:
@@ -375,24 +410,18 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
     
 
     def reset(self):
+        self._time = 0
         self._eventQueue.clear()
         self.__customerQueue.clear()
         self.__customers.clear()
+        for agents in self.__agents:
+            agents.clear()
 
-        # add lv1 agents of different schedules
-        lv1Agents = [Agent(CallCenterSimulator.__schedule1, 0) for _ in range(self.__decision[0])]
-        lv1Agents.extend([Agent(CallCenterSimulator.__schedule2, 0) for _ in range(self.__decision[1])])
-        lv1Agents.extend([Agent(CallCenterSimulator.__schedule3, 0) for _ in range(self.__decision[2])])
-        self.__agents = [
-            lv1Agents,  # currently include only lv1 agents
-            list[Agent](),  # lv2 agents
-            list[Agent](),  # lv3 agents
-        ]
-        
-        self._time = 0
+        for schedule, num in self.__schedules:
+            for _ in range(num):
+                agent = Agent(schedule, 1)
+                self.__agents[0].append(agent)      
 
-
-    def simulate(self) -> IterationStats:
         # create initial arrival
         initialArrival = Arrival(0, self)
         self.addEvent(initialArrival)
@@ -400,11 +429,15 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
         # assign on schedule events to agents who start working at a later time
         for agents in self.__agents:
             for agent in agents:
-                startTimes = [interval[0] for interval in agent.schedule.schedule]
+                startTimes = [interval[0] for interval in agent.schedule]
                 for t in startTimes:
                     if t > 0:
                         agentOnSchedule = AgentOnSchedule(t, agent, self)
                         self.addEvent(agentOnSchedule)
+
+
+    def simulate(self) -> IterationStats:
+        self.reset() 
 
         while not self.shouldStop():
             event: BaseDESEvent = self._eventQueue.get()
@@ -427,8 +460,6 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
 
         stats.customerArrived = len(self.__customers)
         stats.customerServed = len([c for c in self.__customers if c.serviceTime is not None])
-
-        self.reset()    # reset the state of the instance so that next iteration can be executed without errors
         return stats
   
    
@@ -470,7 +501,7 @@ class CallCenterSimulator(BaseDiscreteEventSimulator):
         return CallCenterResult(score, summary, iterationStats)
         
 
-def _serveCustomerHelper(customer:Customer, agent:Agent, system:CallCenterSimulator):
+def _serveCustomerHelper(customer:Customer, agent:Agent, system:CallCenterCase):
     """
     helper function to execute serving logic. used in multiple events
     """
@@ -485,10 +516,10 @@ def _serveCustomerHelper(customer:Customer, agent:Agent, system:CallCenterSimula
 
 
 class AgentOnSchedule(BaseDESEvent):
-    def __init__(self, time: float, agent:Agent, system: CallCenterSimulator) -> None:
+    def __init__(self, time: float, agent:Agent, system: CallCenterCase) -> None:
         super().__init__(time)
         self.__agent: Agent = agent
-        self.__system: CallCenterSimulator = system
+        self.__system: CallCenterCase = system
 
     def execute(self):
         agent = self.__agent
@@ -507,11 +538,11 @@ class AgentOnSchedule(BaseDESEvent):
 
 class ServiceCompletion(BaseDESEvent):
     
-    def __init__(self, time: float, serviceTimeLength:float, customer:Customer, agent:Agent, system: CallCenterSimulator) -> None:
+    def __init__(self, time: float, serviceTimeLength:float, customer:Customer, agent:Agent, system: CallCenterCase) -> None:
         super().__init__(time)
         self.__customer: Customer = customer
         self.__agent: Agent = agent
-        self.__system: CallCenterSimulator = system
+        self.__system: CallCenterCase = system
         self.__serviceTime = serviceTimeLength
     
     def execute(self):
@@ -531,14 +562,14 @@ class ServiceCompletion(BaseDESEvent):
 
 class Arrival(BaseDESEvent):
 
-    def __init__(self, time: float, system: CallCenterSimulator) -> None:
+    def __init__(self, time: float, system: CallCenterCase) -> None:
         super().__init__(time)
-        self.__system: CallCenterSimulator = system
+        self.__system: CallCenterCase = system
     
     def execute(self):
 
         # next arrival logic
-        deltaTime = CallCenterSimulator.generateInterArrivalTime(self.time)
+        deltaTime = CallCenterCase.generateInterArrivalTime(self.time)
         nextArrTime = self.__system.systemTime + deltaTime
         if nextArrTime < self.__system.endTime:
             nextArrEvent = Arrival(nextArrTime, self.__system)

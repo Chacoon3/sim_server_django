@@ -3,7 +3,7 @@ import io
 import numpy as np
 import pandas as pd
 import scipy.stats
-from .Core import CaseBase, SimulationException, SimulationResult
+from .Core import SimulationCase, SimulationException, SimulationResult
 from typing import Union
 
 
@@ -31,7 +31,7 @@ class FoodDeliveryResult(SimulationResult):
         return self.summaryData.loc[0,].to_dict()
 
 
-class FoodDelivery(CaseBase):
+class FoodDelivery(SimulationCase):
 
     class DeliveryHub(object):
         """

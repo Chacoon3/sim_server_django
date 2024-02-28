@@ -6,29 +6,29 @@ from io import BytesIO
 from dataclasses import dataclass, field
 from typing import Any
 
+
 @dataclass(order=True)
-class PrioritizedItem:
+class _PrioritizedItem:
     priority: float
     item: Any=field(compare=False)
 
 
 class AppPriorityQueue(object):
     """
-    decorator pattern to encapsulate the priority queue
-    simplifies the interface of the priority queue
+    single-threaded priority queue
     """
 
     def __init__(self) -> None:
-        self.__list = list[PrioritizedItem]()
+        self.__list = list[_PrioritizedItem]()
         self.__counter = 0
 
     def add(self, priority:float, item):
-        priorityItem = PrioritizedItem(priority, item)
+        priorityItem = _PrioritizedItem(priority, item)
         self.__list.append(None)
         self.__siftup(priorityItem, len(self.__list)-1)
         self.__counter += 1
 
-    def __siftup(self, priorityItem:PrioritizedItem, last:int):
+    def __siftup(self, priorityItem:_PrioritizedItem, last:int):
         elements, i, j = self.__list, last, (last-1) // 2
         while i > 0 and priorityItem.priority < elements[j].priority:
             elements[i] = elements[j]
@@ -46,7 +46,7 @@ class AppPriorityQueue(object):
         self.__counter -= 1
         return item.item
     
-    def __siftdown(self, priorityItem:PrioritizedItem, start:int, end:int):
+    def __siftdown(self, priorityItem:_PrioritizedItem, start:int, end:int):
         elements, i, j = self.__list, start, start*2+1
         while j < end:
             if j+1 < end and elements[j+1].priority < elements[j].priority:
@@ -116,7 +116,7 @@ class SimulationResult(object):
         raise NotImplementedError()
 
 
-class CaseBase(object):
+class SimulationCase(object):
     """
     Base class of all the simulation cases
     """
@@ -132,21 +132,21 @@ class CaseBase(object):
         """
         raise NotImplementedError()
 
-    def simulate(self) -> object:
+    def simulate(self):
         '''
         the logic of one iteration in this simulation case.\n
         returns an object storing the result of the iteration
         '''
         raise NotImplementedError()
 
-    def run(self, num_iterations=100) -> SimulationResult:
+    def run(self, num_iterations:int=100) -> SimulationResult:
         '''
         run the simulation case with specified number of iterations
         '''
         raise NotImplementedError()
 
 
-class BaseDiscreteEventSimulator(CaseBase):
+class DiscreteEventCase(SimulationCase):
     """
     abstraction of the state of the system being simulated
     """
@@ -175,6 +175,12 @@ class BaseDiscreteEventSimulator(CaseBase):
         raise NotImplementedError()
     
     def addEvent(self, event) -> bool:
+        raise NotImplementedError()
+    
+    def reset(self):
+        """
+        reset the state of the system so that next iteration can start
+        """
         raise NotImplementedError()
     
 
