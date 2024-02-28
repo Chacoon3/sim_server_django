@@ -12,15 +12,15 @@ Implementation guidline:
 """
 
 
-class Customer:
+class __Customer:
     __id = -1
     __priorityCumDist = [0.03, 0.06, 0.57, 0.98, 1.  ]
 
     @staticmethod
     def __determineOfferType() -> int:
         prob = np.random.random()
-        for index in range(len(Customer.__priorityCumDist)):
-            cumProb = Customer.__priorityCumDist[index]
+        for index in range(len(__Customer.__priorityCumDist)):
+            cumProb = __Customer.__priorityCumDist[index]
             if prob <= cumProb:
                 return index
             
@@ -35,10 +35,10 @@ class Customer:
             return 3
 
     def __init__(self, arrTime:float) -> None:
-        Customer.__id += 1
-        self.__id = Customer.__id
-        self.__offerType = Customer.__determineOfferType()
-        self.__serviceType = Customer.__determineServiceType()
+        __Customer.__id += 1
+        self.__id = __Customer.__id
+        self.__offerType = __Customer.__determineOfferType()
+        self.__serviceType = __Customer.__determineServiceType()
         self.__arrivalTime: float = arrTime
         self.__serviceTime: float = None
         self.__exitTime:float = None
@@ -124,7 +124,7 @@ class Customer:
         return self.__serviceType
     
 
-class Agent:
+class __Agent:
     __id = -1
 
     @staticmethod
@@ -142,9 +142,9 @@ class Agent:
                 prev = s[1]
 
     def __init__(self, schedule:list[list[float]], level:int) -> None:
-        Agent.__validateSchedule(schedule)
-        Agent.__id += 1
-        self.__id = Agent.__id
+        __Agent.__validateSchedule(schedule)
+        __Agent.__id += 1
+        self.__id = __Agent.__id
         self.__level = level
         self.__schedule = schedule
         self.__isBusy = False
@@ -215,7 +215,7 @@ class CallCenterResult(SimulationResult):
     
     def asDict(self) -> dict:
         raise NotImplementedError()
-
+    
 
 class CallCenterCase(DiscreteEventCase):
     """
@@ -351,26 +351,26 @@ class CallCenterCase(DiscreteEventCase):
         self.__schedules = self.convertToSchedule(self.__decision)
         self.__validateArrivalRate()
         self.__endTime = 3600 * 9  # 9 hours
-        self.__customers = list[Customer]() # records all customers
-        self.__customerQueue = AppPriorityQueue()  # priority queues for customers
-        self.__agents = [list[Agent]() for _ in range(3)]  # empty lists for lv1, lv2, lv3 agents
+        self.__customers = list[__Customer]() # records all customers
+        self.__customerQueue = ResourceQueue()  # priority queues for customers
+        self.__agents = [list[__Agent]() for _ in range(3)]  # empty lists for lv1, lv2, lv3 agents
   
 
     def shouldStop(self) -> bool:
         return self._eventQueue.empty() or self.systemTime >= self.__endTime
 
     @property
-    def customers(self) -> list[Customer]:
+    def customers(self) -> list[__Customer]:
         return self.__customers
     
-    def logCustomer(self, customer:Customer):
+    def addCustomer(self, customer:__Customer):
         self.__customers.append(customer)
     
     @property
     def customerQueue(self) -> AppPriorityQueue:
         return self.__customerQueue
     
-    def getIdelAgent(self) -> Union[Agent, None]:
+    def getIdelAgent(self) -> Union[__Agent, None]:
         for lv in range(3):
             agentsArr = self.__agents[lv]
             for agent in agentsArr:
@@ -382,7 +382,7 @@ class CallCenterCase(DiscreteEventCase):
         if event.time < self.systemTime:
             raise SimulationException(f"Invalid event time. Event time cannot be in the past! Current time: {self.systemTime}, event time: {event.time}")
         eventType = type(event)
-        if eventType == Arrival or eventType == ServiceCompletion or eventType == AgentOnSchedule:
+        if eventType == CallArrive or eventType == CallServed or eventType == AgentOnSchedule:
             self._eventQueue.add(event.time, event)
         else:
             raise SimulationException(f"Invalid event. Event type {type(event)} not recognized!")
@@ -419,11 +419,11 @@ class CallCenterCase(DiscreteEventCase):
 
         for schedule, num in self.__schedules:
             for _ in range(num):
-                agent = Agent(schedule, 1)
+                agent = __Agent(schedule, 1)
                 self.__agents[0].append(agent)      
 
         # create initial arrival
-        initialArrival = Arrival(0, self)
+        initialArrival = CallArrive(0, self)
         self.addEvent(initialArrival)
 
         # assign on schedule events to agents who start working at a later time
@@ -501,7 +501,7 @@ class CallCenterCase(DiscreteEventCase):
         return CallCenterResult(score, summary, iterationStats)
         
 
-def _serveCustomerHelper(customer:Customer, agent:Agent, system:CallCenterCase):
+def _serveCustomerHelper(customer:__Customer, agent:__Agent, system:CallCenterCase):
     """
     helper function to execute serving logic. used in multiple events
     """
@@ -510,15 +510,15 @@ def _serveCustomerHelper(customer:Customer, agent:Agent, system:CallCenterCase):
     customer.serviceStartTime = system.systemTime
     serviceTime = system.generateServiceTime()
     leaveTime = system.systemTime + serviceTime
-    serviceEvent = ServiceCompletion(leaveTime, serviceTime, customer, agent, system)
+    serviceEvent = CallServed(leaveTime, serviceTime, customer, agent, system)
     system.addEvent(serviceEvent)
     agent.isBusy = True
 
 
 class AgentOnSchedule(BaseDESEvent):
-    def __init__(self, time: float, agent:Agent, system: CallCenterCase) -> None:
+    def __init__(self, time: float, agent:__Agent, system: CallCenterCase) -> None:
         super().__init__(time)
-        self.__agent: Agent = agent
+        self.__agent: __Agent = agent
         self.__system: CallCenterCase = system
 
     def execute(self):
@@ -536,12 +536,12 @@ class AgentOnSchedule(BaseDESEvent):
             _serveCustomerHelper(customer, agent, self.__system)
         
 
-class ServiceCompletion(BaseDESEvent):
+class CallServed(BaseDESEvent):
     
-    def __init__(self, time: float, serviceTimeLength:float, customer:Customer, agent:Agent, system: CallCenterCase) -> None:
+    def __init__(self, time: float, serviceTimeLength:float, customer:__Customer, agent:__Agent, system: CallCenterCase) -> None:
         super().__init__(time)
-        self.__customer: Customer = customer
-        self.__agent: Agent = agent
+        self.__customer: __Customer = customer
+        self.__agent: __Agent = agent
         self.__system: CallCenterCase = system
         self.__serviceTime = serviceTimeLength
     
@@ -556,11 +556,11 @@ class ServiceCompletion(BaseDESEvent):
         if self.time < self.__system.endTime and self.__agent.isOnSchedule(self.time):
             serviceQueue = self.__system.customerQueue
             if not serviceQueue.empty():
-                customer: Customer = serviceQueue.get()
+                customer: __Customer = serviceQueue.get()
                 _serveCustomerHelper(customer, self.__agent, self.__system)
 
 
-class Arrival(BaseDESEvent):
+class CallArrive(BaseDESEvent):
 
     def __init__(self, time: float, system: CallCenterCase) -> None:
         super().__init__(time)
@@ -572,12 +572,12 @@ class Arrival(BaseDESEvent):
         deltaTime = CallCenterCase.generateInterArrivalTime(self.time)
         nextArrTime = self.__system.systemTime + deltaTime
         if nextArrTime < self.__system.endTime:
-            nextArrEvent = Arrival(nextArrTime, self.__system)
+            nextArrEvent = CallArrive(nextArrTime, self.__system)
             self.__system.addEvent(nextArrEvent)
 
         # current customer logic
-        customer = Customer(self.time)  # create new customer who arrives at the current time
-        self.__system.logCustomer(customer)
+        customer = __Customer(self.time)  # create new customer who arrives at the current time
+        self.__system.addCustomer(customer)
         offerType = customer.offerType
         customerQueue = self.__system.customerQueue
         customer.enqueueTime = self.time  # in this case the incoming call is immediately enqueued

@@ -68,6 +68,21 @@ class AppPriorityQueue(object):
         return self.__counter
 
 
+class ResourceQueue(AppPriorityQueue):
+    """
+    priority queue for customers
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        raise NotImplementedError("should implement the feature to calculate avg queue length.")
+
+    def add(self, priority:int, item: object):
+        super().add(priority, item)
+    
+    def get(self) -> object:
+        return super().get()
+    
+
 class SimulationException(Exception):
     """
     base class of all exceptions raised in the simulation framework
