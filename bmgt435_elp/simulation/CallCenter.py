@@ -218,9 +218,6 @@ class CallCenterResult(SimulationResult):
     
 
 class CallCenterCase(DiscreteEventCase):
-    """
-    systemTime: float, refers to the current time in the simulation, measured by seconds, starting at 0.
-    """
 
     class IterationStats:
         """
