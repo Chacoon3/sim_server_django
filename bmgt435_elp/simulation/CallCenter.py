@@ -14,7 +14,7 @@ Implementation guidline:
 
 class Customer:
     __id = -1
-    __priorityCumDist = [0.03, 0.06, 0.57, 0.98, 1.  ]
+    __priorityCumDist = [0.03, 0.06, 0.57, 0.98, 1.  ]  # the discrete distribution of customer priority (offer type)
 
     @staticmethod
     def __determineOfferType() -> int:
@@ -267,7 +267,7 @@ class CallCenterCase(DiscreteEventCase):
         for numberOfAgents in decision:
             if numberOfAgents < 0:
                 raise SimulationException("Invalid decision. Decision cannot be negative!")
-            if numberOfAgents > 10:
+            if numberOfAgents > 20:
                 raise SimulationException("Invalid decision. Decision cannot be greater than 5!")
             
     @staticmethod
@@ -450,7 +450,7 @@ class CallCenterCase(DiscreteEventCase):
         stats.maxWaitTime = np.max([c.waitTime for c in self.__customers if c.waitTime is not None]),
         stats.avgWaitTime = np.mean([c.waitTime for c in self.__customers if c.waitTime is not None])
 
-        stats.qualityOfService = self.qualityOfService(60)
+        stats.qualityOfService = self.qualityOfService(60)  # this is the performance measure described in the original paper
         stats.agentUtilizationRate = self.agentUtilizationRate()
 
         stats.customerArrived = len(self.__customers)
@@ -534,8 +534,8 @@ class AgentOnSchedule(BaseDESEvent):
         
         serviceQueue = self.__system.customerQueue
         if not serviceQueue.empty():
-            customer = serviceQueue.dequeue()
-            _serveCustomerHelper(customer, agent, self.__system)
+            event = ServiceStart(self.time, agent, self.__system)
+            self.__system.addEvent(event)
 
 
 class ServiceStart(BaseDESEvent):

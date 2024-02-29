@@ -8,7 +8,7 @@ media
 static
 ./*/migrations
 *.conf
-*.ipynb
+# *.ipynb
 *.ipynb_checkpoints
 
 # Backup files # 
