@@ -4,7 +4,35 @@ This module defines the framework-level objects and interfaces for running simul
 
 from io import BytesIO
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Union
+
+class SimulationHelper:
+    """
+    helper class
+    """
+
+    @staticmethod
+    def minGreaterThan(arr:list[Union[float,int]], than: Union[float,int]) -> Union[float,int]:
+        """
+        returns the minimum value in the array that is greater than the specified value
+        """
+        minVal = float("inf")
+        for v in arr:
+            if v > than and v < minVal:
+                minVal = v
+        return minVal
+    
+    @staticmethod
+    def maxLessThan(arr:list[Union[float,int]], than: Union[float,int]) -> Union[float,int]:
+        """
+        returns the maximum value in the array that is less than the specified value
+        """
+        maxVal = float("-inf")
+        for v in arr:
+            if v < than and v > maxVal:
+                maxVal = v
+        return maxVal
+    
 
 
 @dataclass(order=True)
@@ -20,13 +48,13 @@ class AppPriorityQueue(object):
 
     def __init__(self) -> None:
         self.__list = list[_PrioritizedItem]()
-        self.__counter = 0
+        self._count = 0
 
-    def add(self, priority:float, item):
+    def enqueue(self, priority:float, item):
         priorityItem = _PrioritizedItem(priority, item)
         self.__list.append(None)
         self.__siftup(priorityItem, len(self.__list)-1)
-        self.__counter += 1
+        self._count += 1
 
     def __siftup(self, priorityItem:_PrioritizedItem, last:int):
         elements, i, j = self.__list, last, (last-1) // 2
@@ -35,15 +63,15 @@ class AppPriorityQueue(object):
             i, j = j, (j-1) // 2
         elements[i] = priorityItem
 
-    def get(self) -> object:
-        if self.__counter == 0:
+    def dequeue(self) -> object:
+        if self._count == 0:
             raise Exception("Queue is empty!")
         items = self.__list
         item = items[0]
         last = items.pop()
         if len(items) > 0:
             self.__siftdown(last, 0, len(items))
-        self.__counter -= 1
+        self._count -= 1
         return item.item
     
     def __siftdown(self, priorityItem:_PrioritizedItem, start:int, end:int):
@@ -58,29 +86,14 @@ class AppPriorityQueue(object):
         elements[i] = priorityItem
     
     def empty(self) -> bool:
-        return self.__counter == 0
+        return self._count == 0
     
     def clear(self):
         self.__list.clear()
-        self.__counter = 0
+        self._count = 0
 
     def __len__(self):
-        return self.__counter
-
-
-class ResourceQueue(AppPriorityQueue):
-    """
-    priority queue for customers
-    """
-    def __init__(self) -> None:
-        super().__init__()
-        raise NotImplementedError("should implement the feature to calculate avg queue length.")
-
-    def add(self, priority:int, item: object):
-        super().add(priority, item)
-    
-    def get(self) -> object:
-        return super().get()
+        return self._count
     
 
 class SimulationException(Exception):
@@ -175,8 +188,7 @@ class DiscreteEventCase(SimulationCase):
     def systemTime(self) -> float:
         return self._time
       
-    @systemTime.setter
-    def systemTime(self, time:float):
+    def _setSystemTime(self, time:float):
         if time < 0:
             raise SimulationException("Invalid time. Time cannot be negative!")
         if time < self._time:
@@ -197,6 +209,81 @@ class DiscreteEventCase(SimulationCase):
         reset the state of the system so that next iteration can start
         """
         raise NotImplementedError()
+    
+
+class ResourceQueue(AppPriorityQueue):
+    """
+    priority queue for system recourse
+    """
+
+    def __init__(self, system: DiscreteEventCase) -> None:
+        super().__init__()
+        self.__system:DiscreteEventCase = system
+        self.__queueLength = dict[float, int]() # key: time, value: queue length
+        self.__queueLength[0] = 0   # initial queue length
+        self.__maxQueueLength = 0
+
+    def enqueue(self, priority:int, item: object):
+        super().enqueue(priority, item)
+        time = self.__system.systemTime
+        self.__queueLength[time]  = self._count
+        if self._count > self.__maxQueueLength:
+            self.__maxQueueLength = self._count
+    
+    def dequeue(self) -> object:
+        item = super().dequeue()
+        time = self.__system.systemTime
+        self.__queueLength[time]  = self._count
+        return item
+        
+    @property
+    def queueLengthRecord(self) -> dict[float, int]:
+        """
+        a dictionary recording the queue length over time.\n
+        key: time, value: queue length
+        """
+        return self.__queueLength
+    
+    @property
+    def maxQueueLength(self) -> int:
+        return self.__maxQueueLength
+    
+    def avgQueueLengthOverTime(self, start:float, end:float) -> float:
+        """
+        calculate the average queue length over time
+        """
+        
+        if start < 0 or end < 0 or start > end:
+            raise SimulationException("Invalid time range!")
+        
+        timeLength = end - start
+        total = 0
+
+        if start > 0:
+            timeStart = SimulationHelper.maxLessThan(list(self.__queueLength.keys()), start)
+            total += self.__queueLength[timeStart] * (start - timeStart)
+
+        if end < max(self.__queueLength.keys()):
+            keyEnd = SimulationHelper.minGreaterThan(list(self.__queueLength.keys()), end)
+            total += self.__queueLength[keyEnd] * (keyEnd - end)
+            
+        prevTime = start
+        sortedKeys = sorted(self.__queueLength.keys())
+        for time in sortedKeys:
+            if time == prevTime:
+                continue
+            if time > end:
+                break   
+            length = self.__queueLength[time]
+            total += length * (time - prevTime)
+            prevTime = time 
+        return total/timeLength
+
+    
+    def clear(self):
+        super().clear()
+        self.__queueLength.clear()
+        self.__queueLength[0] = 0
     
 
 class BaseDESEvent:
