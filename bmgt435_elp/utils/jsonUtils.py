@@ -1,6 +1,7 @@
 import django.db.models as models
 from bmgt435_elp.simulation.Core import SimulationResult
 from ..bmgtModels import BMGTModelBase, BMGTJsonField
+from typing import Union
 
 import numpy as np
 import json
@@ -29,8 +30,7 @@ class CustomJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-
-def serialize_models(querySet: models.QuerySet | list[BMGTModelBase]) -> str:
+def serialize_models(querySet:  Union[models.QuerySet, list[BMGTModelBase]]) -> str:
     return json.dumps([model.as_dictionary() for model in querySet], cls=CustomJSONEncoder)
 
 def serialize_model_instance(instance:BMGTModelBase) -> str:

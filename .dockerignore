@@ -34,3 +34,5 @@ LICENSE
 README.md
 ./bmgt435_elp/migrations/*
 *.conf
+*.pyc
+db.sqlite3

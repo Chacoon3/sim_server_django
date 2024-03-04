@@ -49,6 +49,7 @@ class AppPriorityQueue(object):
     def __init__(self) -> None:
         self.__list = list[_PrioritizedItem]()
         self._count = 0
+        self.__cursor = 0
 
     def enqueue(self, priority:float, item):
         priorityItem = _PrioritizedItem(priority, item)
@@ -94,7 +95,7 @@ class AppPriorityQueue(object):
 
     def __len__(self):
         return self._count
-    
+
 
 class SimulationException(Exception):
     """

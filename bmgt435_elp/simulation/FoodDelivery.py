@@ -1,4 +1,5 @@
 import openpyxl
+import  copy
 import io
 import numpy as np
 import pandas as pd
@@ -9,9 +10,19 @@ from typing import Union
 
 class FoodDeliveryResult(SimulationResult):
 
+    def __init__(self, centers, policies, score: float, summaryData, iterationData) -> None:
+        super().__init__(score, summaryData, iterationData)
+        self.__centers = centers
+        self.__policies = policies
+
     def asFileStream(self) -> io.BytesIO:
         wb = openpyxl.Workbook(write_only=True)
         main_sheet = wb.create_sheet('main')
+        main_sheet.append(['Decision Variables'])
+        main_sheet.append(['center', 's', 'S'])
+        for center, policy in zip(self.__centers, self.__policies):
+            main_sheet.append([center, policy[0], policy[1]])
+
         main_sheet.append(self.summaryData.columns.tolist())
         for row in self.summaryData.values.tolist():
             main_sheet.append(row)
@@ -134,7 +145,7 @@ class FoodDelivery(SimulationCase):
         super().__init__()
         self.__centers = centers
         self.__policies = policies
-        self.__config = config
+        self.__config = config  # this is for remapping the centers.
         self.__assert_params()
 
     def __assert_params(self) -> None:
@@ -341,7 +352,8 @@ class FoodDelivery(SimulationCase):
         return output
 
     def run(self):
-        if self.__config is not None:
+        original_centers = copy.deepcopy(self.__centers)
+        if self.__config is not None:   # remap centers
             self.__centers = [self.__config[c] for c in self.__centers]
         
         res = self.simulate()
@@ -358,10 +370,10 @@ class FoodDelivery(SimulationCase):
 
         df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
         
-        if self.__config is not None:
+        if self.__config is not None:   # reverse the remapping
             df_per_center_statistics['hub'] = df_per_center_statistics['hub'].map(
                 {v: k for k, v in self.__config.items()}
             )
 
-        simRes = FoodDeliveryResult(score, df_aggregated_statistics, df_per_center_statistics)
+        simRes = FoodDeliveryResult(original_centers, self.__policies, score, df_aggregated_statistics, df_per_center_statistics)
         return simRes

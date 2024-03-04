@@ -188,7 +188,8 @@ class BMGTCaseRecord(BMGTModelBase):
         SUCCESS = 1
         FAILED = 2
 
-    def generate_file_name(group: BMGTGroup, user: BMGTUser, case: BMGTCase) -> str:
+
+    def get_file_name(group: BMGTGroup, user: BMGTUser, case: BMGTCase) -> str:
         """
         name of the detailed case record which is stored on the server, does not contain directory info
         """
@@ -201,6 +202,7 @@ class BMGTCaseRecord(BMGTModelBase):
     case = models.ForeignKey(
         BMGTCase, on_delete=models.SET_NULL, null=True,)
     score = models.FloatField(null=True, default=None)
+    performance_metric = models.FloatField(null=True, default=None)
     state = models.IntegerField(
         State.choices, default=State.RUNNING, null=False)
     summary_dict = models.TextField(null=False, default="")
@@ -224,7 +226,9 @@ class BMGTCaseRecord(BMGTModelBase):
                 case_name=self.case.name if self.case else 'Unknown case',
                 state=self.State.choices[self.state][1],
                 score=self.score,
+                performance_metric=self.performance_metric,
                 file = self.file_name,
+                summary = self.summary_dict,
         )
 
 

@@ -1,5 +1,5 @@
 from django.http import HttpRequest, HttpResponse
-from django.views.decorators.http import require_POST, require_GET
+from django.views.decorators.http import require_POST, require_GET, require_http_methods
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import IntegrityError, transaction
 from django.db.models import Max
@@ -292,23 +292,22 @@ class CaseApi:
                 group = user.group
                 if CaseApi.__case_submittable(case_instance, group):                    
                     # id to simulation case mapping
-                    match case_id:
-                        case 1:     # food center
-                            params = data['case_params']
-                            configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
-                            if configQuery.exists():
-                                config = json.loads(configQuery.get().config_json)
-                                params['config'] = config
-                            simulation_instance = FoodDelivery(**params)
-                        case _:
-                            resp.reject("Case not found!")
+                    if case_id == 1:     # food center
+                        params = data['case_params']
+                        configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
+                        if configQuery.exists():
+                            config = json.loads(configQuery.get().config_json)
+                            params['config'] = config
+                        simulation_instance = FoodDelivery(**params)
+                    else:
+                        resp.reject("Case not found!")
 
                     # create case record first. simulation eligibility is calculated based on valid case records
                     with transaction.atomic():
                         case_record = BMGTCaseRecord(
                             user=user,
                             case=case_instance, group=group, state=BMGTCaseRecord.State.RUNNING,
-                            file_name = BMGTCaseRecord.generate_file_name(group, user, case_instance)
+                            file_name = BMGTCaseRecord.get_file_name(group, user, case_instance),
                         )
                         case_record.save()
 
@@ -406,18 +405,17 @@ class CaseRecordApi:
         try:
             resp = AppResponse()
             case_id = int(request.GET.get('case_id'))
-            match case_id:
-                case 1:
-                    page = int(request.GET.get('page', None))
-                    size = int(request.GET.get('size', None))
-                    query_params = create_pager_params(page, size, 0, 'score')
-                    return generic_paginated_query(
-                        BMGTCaseRecord, query_params,
-                        state=BMGTCaseRecord.State.SUCCESS,
-                        case_id=case_id)
-
-                case _:
-                    raise BMGTCase.DoesNotExist
+            if case_id == 1:
+                page = int(request.GET.get('page', None))
+                size = int(request.GET.get('size', None))
+                query_params = create_pager_params(page, size, 0, 'score')
+                return generic_paginated_query(
+                    BMGTCaseRecord, query_params,
+                    state=BMGTCaseRecord.State.SUCCESS,
+                    case_id=case_id
+                    )
+            else:
+                raise BMGTCase.DoesNotExist
         except KeyError:
             resp.reject("Invalid data format!")
         except BMGTCase.DoesNotExist:
@@ -461,7 +459,7 @@ class ManageApi:
     @request_error_handler
     @require_POST
     @staticmethod
-    def update_food_delivery_config(request: HttpRequest) -> HttpResponse:
+    def set_food_delivery_config(request: HttpRequest) -> HttpResponse:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
@@ -536,6 +534,48 @@ class ManageApi:
             resp.reject("Invalid data format!")
 
         return resp
+    
+
+    @staticmethod
+    def __set_case_submission_limit(request: HttpRequest) -> HttpResponse:
+        try:
+            data = json.loads(request.body)
+            case_id = data['case_id']
+            max_submission = data['max_submission']
+            case = BMGTCase.objects.get(id=case_id)
+            case.max_submission = max_submission
+            case.save()
+            resp = AppResponse()
+            resp.resolve("Case submission limit set!")
+        except BMGTCase.DoesNotExist:
+            resp.reject("Case not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+        return resp
+    
+
+    @staticmethod
+    def __get_case_submission_limit(request: HttpRequest) -> HttpResponse:
+        try:
+            case_id = request.GET.get('case_id')
+            case = BMGTCase.objects.get(id=case_id)
+            resp = AppResponse()
+            resp.resolve(case.max_submission)
+        except BMGTCase.DoesNotExist:
+            resp.reject("Case not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+        return resp
+    
+    
+    @request_error_handler
+    @require_http_methods(["POST", "GET"])
+    @staticmethod
+    def set_case_submission_limit(request: HttpRequest) -> HttpResponse:
+        if request.method == "POST":
+            return ManageApi.__set_case_submission_limit(request)
+        elif request.method == "GET":
+            return ManageApi.__get_case_submission_limit(request)
     
 
     @request_error_handler

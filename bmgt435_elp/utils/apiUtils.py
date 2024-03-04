@@ -137,8 +137,9 @@ def generic_paginated_query(dbModel, pager_params, **kwargs) -> HttpResponse:
         resp = AppResponse()
 
         obj_set = dbModel.objects.filter(**kwargs)
+        asc = True if pager_params['asc'] == '1' else False
         obj_set = obj_set.order_by(
-            pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
+            pager_params['order'] if asc else '-'+pager_params['order'])
         pager = Paginator(obj_set, pager_params['size'])
         page = pager_params['page']
 

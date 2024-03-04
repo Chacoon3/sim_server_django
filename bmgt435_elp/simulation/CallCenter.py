@@ -438,6 +438,7 @@ class CallCenterCase(DiscreteEventCase):
 
         # calculate and return iteration stats
         stats = self.IterationStats()
+
         stats.maxTimeInQueue = np.max([c.waitTime for c in self.__customers if c.waitTime is not None]),
         stats.avgTimeInQueue = np.mean([c.waitTime for c in self.__customers if c.waitTime is not None]),
 
@@ -455,6 +456,7 @@ class CallCenterCase(DiscreteEventCase):
 
         stats.maxQueueLength = np.max(self.__customerQueue.maxQueueLength)
         stats.avgQueueLengthOverTime = self.__customerQueue.avgQueueLengthOverTime(0, self.endTime)
+
         return stats
   
    
@@ -498,20 +500,6 @@ class CallCenterCase(DiscreteEventCase):
         score = avgQualityOfService * 0.5 + avgAgentUtilizationRate * 0.5
 
         return CallCenterResult(score, summary, iterationStats)
-        
-
-def _serveCustomerHelper(customer:Customer, agent:Agent, system:CallCenterCase):
-    """
-    helper function to execute serving logic. used in multiple events
-    """
-
-    # start service
-    customer.serviceStartTime = system.systemTime
-    serviceTime = system.generateServiceTime()
-    leaveTime = system.systemTime + serviceTime
-    serviceEvent = CallServed(leaveTime, serviceTime, customer, agent, system)
-    system.addEvent(serviceEvent)
-    agent.isBusy = True
 
 
 class AgentOnSchedule(BaseDESEvent):
@@ -575,29 +563,17 @@ class ServiceEnd(BaseDESEvent):
             self.__system.addEvent(serviceStartEvent)
 
 
-class CallServed(BaseDESEvent):
-    
-    def __init__(self, time: float, serviceTimeLength:float, customer:Customer, agent:Agent, system: CallCenterCase) -> None:
+class TryRenege(BaseDESEvent):
+    def __init__(self, time: float) -> None:
         super().__init__(time)
-        self.__serviceTime = serviceTimeLength
-        self.__customer: Customer = customer
-        self.__agent: Agent = agent
-        self.__system: CallCenterCase = system
+        raise NotImplementedError()
     
-    def execute(self):
-        # customer logic
-        self.__customer.serviceTime = self.__serviceTime
-        self.__customer.exitTime = self.time
-        
-        # agent logic. serve next customer only when the agent is on schedule
-        self.__agent.isBusy = False
-        self.__agent.totalServiceTime += self.__serviceTime
-        if self.time < self.__system.endTime and self.__agent.isOnSchedule(self.time):
-            customerQueue = self.__system.customerQueue
-            if not customerQueue.empty():
-                customer: Customer = customerQueue.dequeue()
-                _serveCustomerHelper(customer, self.__agent, self.__system)
 
+class Callback(BaseDESEvent):
+    def __init__(self, time: float) -> None:
+        super().__init__(time)
+        raise NotImplementedError()
+    
 
 class CallArrive(BaseDESEvent):
 

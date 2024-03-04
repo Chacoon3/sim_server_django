@@ -38,7 +38,9 @@ urlpatterns = [
     path('api/manage/groups/paginated', ManageApi.group_view_paginated,),
     path('api/manage/groups/delete', ManageApi.delete_group,),
 
-    path('api/manage/food-delivery-config/update', ManageApi.update_food_delivery_config,),
+    path('api/manage/case/submission-limit', ManageApi.set_case_submission_limit,),
+
+    path('api/manage/food-delivery-config/update', ManageApi.set_food_delivery_config,),
     path('api/manage/food-delivery-config/view', ManageApi.view_food_delivery_config,),
 
     path('api/manage/semesters/create', ManageApi.create_semester,),
