@@ -1,5 +1,5 @@
 import openpyxl
-import  copy
+import copy
 import io
 import numpy as np
 import pandas as pd
@@ -126,10 +126,10 @@ class FoodDelivery(SimulationCase):
     
     @staticmethod
     def is_config_valid(config:dict) -> bool:
-        if config is not None:
-            set_keys = set(config.keys())
-            set_values = set(config.values())
-            set_valid_values = set(FoodDelivery.__center_names)
+        if config:
+            set_keys = set[str]([str(k) for k in config.keys()])
+            set_values = set[str]([str(v) for v in config.values()])
+            set_valid_values = set[str](FoodDelivery.__center_names)
             input_mapper_valid = (set_keys == set_values and set_keys == set_valid_values and len(set_keys) == len(config.keys())) 
             return input_mapper_valid
         return False

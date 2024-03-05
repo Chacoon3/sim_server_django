@@ -23,9 +23,9 @@ COPY ./manage.py ./manage.py
 
 USER root
 RUN mkdir /app/media && \
-    chmod -R 700 /app/media && \
+    chmod -R 744 /app/media && \
     mkdir /app/static && \
-    chmod -R -700 /app/static &&\
+    chmod -R -744 /app/static &&\
     python manage.py collectstatic --noinput
 
 EXPOSE 8000

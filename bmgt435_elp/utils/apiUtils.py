@@ -1,6 +1,8 @@
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, ValidationError
 from django.db import IntegrityError, OperationalError
 from django.core.paginator import Paginator, EmptyPage
+from django.db.models import Model
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from http import HTTPStatus
 from .jsonUtils import CustomJSONEncoder
@@ -12,9 +14,10 @@ import json
 
 
 __BATCH_QUERY_SIZE = 40
+__DEFAULT_ORDER=['-id']
 
 
-def get_batch_size(listObj):
+def __get_batch_size(listObj):
     return min(len(listObj), __BATCH_QUERY_SIZE)
 
 
@@ -68,16 +71,12 @@ def request_error_handler(func):
             resp.reject(e.args[0])
             
         except Exception as e:
-            # resp = HttpResponse()
-            # resp.reject(e.args[0])
-            # resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
-
-            # if settings.DEBUG:
-            raise
-            # else:
-                # resp = HttpResponse()
-                # resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
-                # resp.write("Internal server error!")
+            if settings.DEBUG:
+                raise
+            else:
+                resp = HttpResponse()
+                resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+                resp.write("Internal server error!")
         
         return resp
 
@@ -95,15 +94,13 @@ def password_valid(password: str) -> bool:
     return leng_valid and has_char and has_num
 
 
-def create_pager_params(page: int, size: int, asc: int, order: str) -> dict:
+def create_pager_params(page: int, size: int, order: list[str]) -> dict:
     """
     convert get parameters to pagination parameters for paginated query
     """
-
     params = {}
     params['page'] = page
     params['size'] = size
-    params['asc'] = asc
     params['order'] = order
     return params
 
@@ -112,22 +109,26 @@ def pager_params_from_request(request: HttpRequest) -> dict:
     """
     convert get parameters to pagination parameters for paginated query
     """
-
-    params = {}
-    params['page'] = request.GET.get('page', None)
-    params['size'] = request.GET.get('size', None)
-    params['asc'] = request.GET.get('asc', '1')
-    params['order'] = request.GET.get('order', 'id')
-    if not params['page'] or not params['size']:
-        raise KeyError("missing pagination parameters")
-    params['page'] = int(params['page'])
-    params['size'] = int(params['size'])
-    if not params['size'] > 0:
+    
+    page = int(request.GET['page'])
+    size = int(request.GET['size'])
+    order = request.GET.get('order', None)
+    if order:
+        order = order.split('0')
+    else:
+        order = __DEFAULT_ORDER
+    if not size > 0:
         raise ValueError("invalid page size")
-    return params
+    if not page > 0:
+        raise ValueError("invalid page number")
+    return {
+        'page': page,
+        'size': size,
+        'order': order
+    }
 
 
-def generic_paginated_query(dbModel, pager_params, **kwargs) -> HttpResponse:
+def generic_paginated_query(dbModel: Model, pager_params, **kwargs) -> HttpResponse:
     """
     generic paginated query on one table
     pass in a model class and a request object    
@@ -137,9 +138,8 @@ def generic_paginated_query(dbModel, pager_params, **kwargs) -> HttpResponse:
         resp = AppResponse()
 
         obj_set = dbModel.objects.filter(**kwargs)
-        asc = True if pager_params['asc'] == '1' else False
-        obj_set = obj_set.order_by(
-            pager_params['order'] if asc else '-'+pager_params['order'])
+        order = pager_params.get('order', __DEFAULT_ORDER)
+        obj_set = obj_set.order_by(*order)
         pager = Paginator(obj_set, pager_params['size'])
         page = pager_params['page']
 

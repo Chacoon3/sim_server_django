@@ -3,8 +3,8 @@ from django.views.decorators.http import require_POST, require_GET, require_http
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import IntegrityError, transaction
 from django.db.models import Max
+from django.conf import settings
 
-from .apps import bmgt435_file_system
 from .simulation import FoodDelivery, SimulationException
 from .bmgtModels import *
 from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
@@ -13,15 +13,14 @@ import pandas as pd
 import json
 import io
 
-
 """
 All requests have been verified to have valid user id except for those of the Auth.
 """
 
-
-CASE_RECORD_PATH = bmgt435_file_system.base_location.__str__() + "case_records/"
-MAX_GROUP_SIZE = 4
-FOOD_DELIVERY_CASE_ID = 1
+_CASE_RECORD_PATH = settings.MEDIA_ROOT  + "bmgt435/case-records/"
+_MAX_GROUP_SIZE = 4
+_FOOD_DELIVERY_CASE_ID = 1
+_CALL_CENTER_CASE_ID = 2
 
 
 def _get_session_user(request: HttpRequest) -> BMGTUser:
@@ -29,19 +28,23 @@ def _get_session_user(request: HttpRequest) -> BMGTUser:
     raise key error if cookie not found
     raise does not exist error if user not found
     """
-    id = request.COOKIES.get('id', None)
-    user = BMGTUser.objects.get(id=id, activated=True,)
+
+    try:
+        user: BMGTUser = request.app_user
+    except:
+        id = request.COOKIES.get('id', None)
+        user = BMGTUser.objects.get(id=id, activated=True,)
     return user
 
 
 class AuthApi:
 
-    MAX_AGE_REMEMBER = 60 * 60 * 24 * 7 # 7 days
+    __MAX_AGE_REMEMBER = 60 * 60 * 24 * 7 # 7 days
 
     @staticmethod
     def __set_auth_cookie(response: HttpResponse, user: BMGTUser, remember: bool) -> None:
         if remember:
-            response.set_cookie('id', str(user.id), samesite='strict', secure=True, httponly=True, max_age=AuthApi.MAX_AGE_REMEMBER)
+            response.set_cookie('id', str(user.id), samesite='strict', secure=True, httponly=True, max_age=AuthApi.__MAX_AGE_REMEMBER)
         else:
             response.set_cookie('id', str(user.id), samesite='strict', secure=True, httponly=True)
 
@@ -71,10 +74,6 @@ class AuthApi:
             resp.reject("Sign in failed. Invalid data format!")
         
         return resp
-
-    @staticmethod
-    def set_session_cookie(response: HttpResponse, user: BMGTUser) -> None:
-        pass
 
     @request_error_handler
     @require_POST
@@ -116,8 +115,9 @@ class AuthApi:
     @staticmethod
     def sign_out(request: HttpRequest) -> HttpResponse:
         try:
+            id = request.COOKIES.get('id', None)
+            user = BMGTUser.objects.get(id=id, activated=True,)
             resp = AppResponse()
-            user = _get_session_user(request)
             resp.resolve("Sign out success!")
             AuthApi.__clear_auth_cookie(resp)
         except (BMGTUser.DoesNotExist, KeyError) as e:
@@ -205,7 +205,7 @@ class GroupApi:
                 if user.role == BMGTUser.BMGTUserRole.USER and user.semester_id != group.semester_id:
                     resp.reject("You cannot join a group in another semester!")
                 else:
-                    if group.users.count() >= MAX_GROUP_SIZE:
+                    if group.users.count() >= _MAX_GROUP_SIZE:
                         resp.reject("Group already full!")
                     elif group.is_frozen:
                         resp.reject("Cannot join the group at this time!")
@@ -313,17 +313,18 @@ class CaseApi:
 
                     # run simulation
                     res = simulation_instance.run()
-                    caseRecordFile = res.asFileStream()
+                    caseRecordStream = res.asFileStream()
                     caseSummary = res.asDict()
                     case_record.summary_dict = caseSummary
-                    bmgt435_file_system.save(CASE_RECORD_PATH + case_record.file_name, caseRecordFile)
+                    with open(_CASE_RECORD_PATH + case_record.file_name, "wb") as file:
+                        file.write(caseRecordStream.getvalue())
                     case_record.state = BMGTCaseRecord.State.SUCCESS
                     case_record.score = res.score
                     case_record.save()
                     resp.resolve({
                         "case_record_id": case_record.id,
                         "summary": case_record.summary_dict,
-                        "file_url": case_record.file_url,
+                        "file_name": case_record.file_name,
                         })
                 else:
                     resp.reject("You have reached the maximum submission for this case!")
@@ -379,12 +380,9 @@ class CaseRecordApi:
     @request_error_handler
     @require_GET
     @staticmethod
-    def get_case_record_file(request: HttpRequest) -> HttpResponse:
-        # feature of this interface should be replaced by direct static file get request handled by the proxy server
-        case_record_id = request.GET.get('id', None)
-        case_record = BMGTCaseRecord.objects.get(id=case_record_id, )
-        file_name = CASE_RECORD_PATH + case_record.file_name
-        with open(file_name, 'rb') as file:
+    def download_case_record(request: HttpRequest, file_name:str) -> HttpResponse:
+        full_path = _CASE_RECORD_PATH + file_name
+        with open(full_path, 'rb') as file:
             response = HttpResponse(file.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',)
             return response
         
@@ -408,7 +406,7 @@ class CaseRecordApi:
             if case_id == 1:
                 page = int(request.GET.get('page', None))
                 size = int(request.GET.get('size', None))
-                query_params = create_pager_params(page, size, 0, 'score')
+                query_params = create_pager_params(page, size, ['-performance_metric', '-score'])
                 return generic_paginated_query(
                     BMGTCaseRecord, query_params,
                     state=BMGTCaseRecord.State.SUCCESS,
@@ -454,32 +452,38 @@ class ManageApi:
             resp.reject("Semester not found!")
         
         return resp
-
+    
 
     @request_error_handler
     @require_POST
     @staticmethod
-    def set_food_delivery_config(request: HttpRequest) -> HttpResponse:
+    def set_case_config(request: HttpRequest) -> HttpResponse:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
-            case_id = FOOD_DELIVERY_CASE_ID
-            query = BMGTCaseConfig.objects.filter(case_id=case_id, )
-            if query.exists():
-                config = query.get()
+            configObj = {}
+            for pair in data['config']:
+                val1 = pair[0]
+                val2 = pair[1]
+                configObj[val1] = val2
+            case_id = int(data['case_id'])
+            querySet = BMGTCaseConfig.objects.filter(case_id=case_id)
+            if not querySet.exists():
+                config = BMGTCaseConfig(case_id=case_id)
             else:
-                with transaction.atomic():
-                    config = BMGTCaseConfig(case_id=case_id,)
+                config = querySet.get()
+            if case_id == _FOOD_DELIVERY_CASE_ID:
+                if FoodDelivery.is_config_valid(configObj):
+                    config.config_json = json.dumps(configObj)
+                    config.edited_time = timezone.now()
                     config.save()
-            
-            params = dict(data['config'])
-            if FoodDelivery.is_config_valid(params):
-                config.config_json = json.dumps(params)
-                config.edited_time = timezone.now()
-                config.save()
-                resp.resolve("Case configured!")
+                    resp.resolve("New map applied!")
+                else:
+                    resp.reject("Invalid case configuration!")
+            elif case_id == _CALL_CENTER_CASE_ID:
+                ManageApi.set_call_center_config(configObj)
             else:
-                resp.reject("Invalid case configuration!")
+                raise BMGTCase.DoesNotExist
             
         except BMGTCase.DoesNotExist:
             resp.reject("Case not found!")
@@ -492,16 +496,36 @@ class ManageApi:
     @request_error_handler
     @require_GET
     @staticmethod
-    def  view_food_delivery_config(request: HttpRequest) -> HttpResponse:
+    def  view_case_config(request: HttpRequest) -> HttpResponse:
         pager_params = pager_params_from_request(request)
-        pager_params['case_id'] = FOOD_DELIVERY_CASE_ID
+        pager_params['case_id'] = _FOOD_DELIVERY_CASE_ID
         return generic_paginated_query(BMGTCaseConfig, pager_params)
+    
 
     @request_error_handler
     @require_GET
     @staticmethod
     def view_users(request: HttpRequest) -> HttpResponse:
         return generic_paginated_query(BMGTUser, pager_params_from_request(request))
+    
+    @request_error_handler
+    @require_POST
+    @staticmethod
+    def delete_users(request: HttpRequest) -> HttpResponse:
+        try:
+            resp = AppResponse()
+            data = json.loads(request.body)
+            arr_user_id = data['arr_user_id']
+            users = BMGTUser.objects.filter(id__in=arr_user_id)
+            with transaction.atomic():
+                users.delete()
+            resp.resolve("Users deleted!")
+        except BMGTUser.DoesNotExist:
+            resp.reject("User not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+
+        return resp
 
     @request_error_handler
     @require_GET
@@ -539,14 +563,14 @@ class ManageApi:
     @staticmethod
     def __set_case_submission_limit(request: HttpRequest) -> HttpResponse:
         try:
+            resp = AppResponse()
             data = json.loads(request.body)
             case_id = data['case_id']
-            max_submission = data['max_submission']
+            max_submission = int(data['max_submission'])
             case = BMGTCase.objects.get(id=case_id)
             case.max_submission = max_submission
             case.save()
-            resp = AppResponse()
-            resp.resolve("Case submission limit set!")
+            resp.resolve(f"Case submission set to {max_submission}!")
         except BMGTCase.DoesNotExist:
             resp.reject("Case not found!")
         except KeyError:
@@ -557,9 +581,9 @@ class ManageApi:
     @staticmethod
     def __get_case_submission_limit(request: HttpRequest) -> HttpResponse:
         try:
+            resp = AppResponse()
             case_id = request.GET.get('case_id')
             case = BMGTCase.objects.get(id=case_id)
-            resp = AppResponse()
             resp.resolve(case.max_submission)
         except BMGTCase.DoesNotExist:
             resp.reject("Case not found!")
@@ -571,11 +595,28 @@ class ManageApi:
     @request_error_handler
     @require_http_methods(["POST", "GET"])
     @staticmethod
-    def set_case_submission_limit(request: HttpRequest) -> HttpResponse:
+    def case_submission_limit(request: HttpRequest) -> HttpResponse:
         if request.method == "POST":
             return ManageApi.__set_case_submission_limit(request)
         elif request.method == "GET":
             return ManageApi.__get_case_submission_limit(request)
+        
+    
+    @request_error_handler
+    @require_GET
+    @staticmethod
+    def case_submissions(request: HttpRequest) -> HttpResponse:
+        try:
+            resp = AppResponse()
+            case_id = request.GET.get('case_id')
+            pagerParams = pager_params_from_request(request)
+            return generic_paginated_query(BMGTCaseRecord, pagerParams, case_id=case_id)
+        except BMGTCase.DoesNotExist:
+            resp.reject("Case not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+
+        return resp
     
 
     @request_error_handler
@@ -684,32 +725,32 @@ class ManageApi:
         return resp
 
 
-class FeedbackApi:
+# class FeedbackApi:
 
-    @request_error_handler
-    @require_POST
-    @staticmethod
-    def post(request: HttpRequest) -> HttpResponse:
-        try:
-            resp = AppResponse()
-            data = json.loads(request.body)
-            user: BMGTUser = _get_session_user(request)
-            content = data.get('content')
-            if content:
-                feedback = BMGTFeedback(user=user, content=content)
-                feedback.save()
-                resp.resolve("Feedback submitted!")
-            else:
-                resp.reject("Feedback cannot be empty!")  
-        except KeyError:
-            resp.reject("Invalid data format!")
-        except Exception as e:
-            resp.reject(e)
+#     @request_error_handler
+#     @require_POST
+#     @staticmethod
+#     def post(request: HttpRequest) -> HttpResponse:
+#         try:
+#             resp = AppResponse()
+#             data = json.loads(request.body)
+#             user: BMGTUser = _get_session_user(request)
+#             content = data.get('content')
+#             if content:
+#                 feedback = BMGTFeedback(user=user, content=content)
+#                 feedback.save()
+#                 resp.resolve("Feedback submitted!")
+#             else:
+#                 resp.reject("Feedback cannot be empty!")  
+#         except KeyError:
+#             resp.reject("Invalid data format!")
+#         except Exception as e:
+#             resp.reject(e)
         
-        return resp
+#         return resp
     
-    @request_error_handler
-    @require_GET
-    @staticmethod
-    def feedback_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_query(BMGTFeedback, pager_params_from_request(request))
+#     @request_error_handler
+#     @require_GET
+#     @staticmethod
+#     def feedback_paginated(request: HttpRequest) -> HttpResponse:
+#         return generic_paginated_query(BMGTFeedback, pager_params_from_request(request))

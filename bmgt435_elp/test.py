@@ -84,11 +84,9 @@ class AppTestCaeBase(TestCase):
     def _deserialize_resp_data(self, resp:HttpResponse) -> dict:
         return json.loads(resp.content)
 
-
     def assertResolved(self, resp:HttpResponse, msg=None):
         data = self._deserialize_resp_data(resp)
-        self.assertTrue(data.get('data', None) is not None, msg)
-
+        self.assertTrue(data.get('data', None) is not None, msg if msg else data.get('errorMsg', None))
 
     def assertRejected(self, resp:HttpResponse, msg=None):
         data = self._deserialize_resp_data(resp)
@@ -497,43 +495,45 @@ class TestManageApi(AppTestCaeBase):
 
     def testFoodDeliveryConfigPositive(self):
         config= {
-            'config_json':[
+            'config':[
                 [1, 2],
                 [2, 1],
                 [3, 4],
                 [4, 3],
                 [5, 6],
                 [6, 5],
-            ]
+            ],
+            "case_id":1
         }
         c = Client()
         c.cookies = SimpleCookie({'id':1})
-        resp = c.post('api/manage/food-delivery-config/update', json.dumps(config), content_type='application/json')
+        resp = c.post('/bmgt435-service/api/manage/case-config/update', json.dumps(config), content_type='application/json')
         self.assertResolved(resp)
 
 
     def testFoodDeliveryConfigNegative(self):
         config= {
-            'config_json':[
+            'config':[
                 [1, 2],
                 [2, 1],
                 [3, 4],
                 [4, 3],
                 [5, 6],
                 [6, 5],
-            ]
+            ],
+            "case_id":1
         }
         c = Client()
         c.cookies = SimpleCookie({'id':2})
-        resp = c.post('api/manage/food-delivery-config/update', json.dumps(config), content_type='application/json')
+        resp = c.post('/bmgt435-service/api/manage/case-config/update', json.dumps(config), content_type='application/json')
         self.assertRejected(resp)
 
         c.cookies = SimpleCookie({'id':-1})
-        resp = c.post('api/manage/food-delivery-config/update', json.dumps(config), content_type='application/json')
+        resp = c.post('/bmgt435-service/api/manage/case-config/update', json.dumps(config), content_type='application/json')
         self.assertRejected(resp)
 
         badConfig = {
-            'config_json':[
+            'config':[
                 [1, 2],
                 [2, 1],
                 [3, 4],
@@ -541,24 +541,26 @@ class TestManageApi(AppTestCaeBase):
                 [5, 6],
                 [6, 5],
                 [7, 8],
-            ]
+            ],
+            "case_id":1
         }
 
         c.cookies = SimpleCookie({'id':1})
-        resp = c.post('api/manage/food-delivery-config/update', json.dumps(badConfig), content_type='application/json')
+        resp = c.post('/bmgt435-service/api/manage/case-config/update', json.dumps(badConfig), content_type='application/json')
         self.assertRejected(resp)
 
         badConfig2 = {
-            'config_json':[
+            'config':[
                 [1, 2],
                 [2, 1],
                 [3, 4],
                 [4, 3],
                 [5, 6],
                 [6, 1],
-            ]
+            ],
+            "case_id":1
         }
-        resp = c.post('api/manage/food-delivery-config/update', json.dumps(badConfig2), content_type='application/json')
+        resp = c.post('/bmgt435-service/api/manage/case-config/update', json.dumps(badConfig2), content_type='application/json')
         self.assertRejected(resp)
         
 
@@ -574,9 +576,9 @@ class TestManageApi(AppTestCaeBase):
     def testSetCaseSubmissionLimitPositive(self):
         c = Client()
         c.cookies = SimpleCookie({'id':1})
-        resp = c.post('api/manage/case/submission-limit', json.dumps({'case_id':1, 'limit':10}), content_type='application/json')
+        resp = c.post('/bmgt435-service/api/manage/case-submissions/limit', json.dumps({'case_id':1, 'max_submission':10}), content_type='application/json')
         self.assertResolved(resp)
 
-        resp = c.get('api/manage/case/submission-limit', {'case_id':1})
+        resp = c.get('/bmgt435-service/api/manage/case-submissions/limit', {'case_id':1})
         self.assertResolved(resp)
         self.assertEqual(json.loads(resp.content)['data'], 10)

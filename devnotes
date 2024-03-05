@@ -1,0 +1,10 @@
+Tasks
+
+2. docker volume for persistance of case records
+
+static file lifecycle
+
+1. write to disk. record local path.
+2. returns a url to client
+--> need a bijection between local path and url
+localpath: ./

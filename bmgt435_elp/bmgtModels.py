@@ -3,7 +3,7 @@ from django.db.models import QuerySet
 from django.conf import settings
 from django.utils import timezone
 from .apps import BmgtPlatformConfig
-import random
+import datetime
 
 
 """
@@ -112,7 +112,7 @@ class BMGTUser(BMGTModelBase):
     activated = models.BooleanField(default=False,  null=False)
     role = models.CharField(choices=BMGTUserRole.choices, default=BMGTUserRole.USER, null=False, max_length=5)
     group = models.ForeignKey(BMGTGroup, on_delete=models.SET_NULL, null=True)
-    semester = models.ForeignKey(BMGTSemester, on_delete=models.SET_NULL, null=True)  # allow null for admin
+    semester = models.ForeignKey(BMGTSemester, on_delete=models.RESTRICT, null=True)  # allow null for admin
 
     @property
     def name(self):
@@ -193,25 +193,21 @@ class BMGTCaseRecord(BMGTModelBase):
         """
         name of the detailed case record which is stored on the server, does not contain directory info
         """
-        return f"{group.id}_{user.id}_{case.id}_{random.randint(0,99999):06d}.xlsx"
+        timestamp = int(datetime.datetime.now().timestamp() * 1000)
+        return f"cr{group.id}_{user.id}_{case.id}_{timestamp}"
 
     group = models.ForeignKey(
         BMGTGroup, on_delete=models.SET_NULL, null=True,)
     user = models.ForeignKey(
         BMGTUser, on_delete=models.SET_NULL, null=True,)
     case = models.ForeignKey(
-        BMGTCase, on_delete=models.SET_NULL, null=True,)
+        BMGTCase, on_delete=models.CASCADE, null=True,)
     score = models.FloatField(null=True, default=None)
     performance_metric = models.FloatField(null=True, default=None)
     state = models.IntegerField(
         State.choices, default=State.RUNNING, null=False)
     summary_dict = models.TextField(null=False, default="")
     file_name = models.CharField(max_length=30, null=False, auto_created=False, editable=False, unique=True)
-
-    @property
-    def file_url(self) -> str:
-        return f"{settings.STATIC_URL}bmgt435/case_record/{self.file_name}"
-
 
     def as_dictionary(self) -> dict:
 
@@ -227,8 +223,7 @@ class BMGTCaseRecord(BMGTModelBase):
                 state=self.State.choices[self.state][1],
                 score=self.score,
                 performance_metric=self.performance_metric,
-                file = self.file_name,
-                summary = self.summary_dict,
+                file_name = self.file_name,
         )
 
 

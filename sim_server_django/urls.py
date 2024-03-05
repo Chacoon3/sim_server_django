@@ -17,11 +17,15 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
+from .config import AppConfig
 
-
-
-urlpatterns = [
-    path("bmgt435-service/admin/", admin.site.urls),
-    path("bmgt435-service/", include("bmgt435_elp.urls")),
-    path("bmgt435-service/static/", include("bmgt435_elp.urls")),
-] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT) # for serving static files in development
+if AppConfig.APP_DEBUG == True:
+    urlpatterns = [
+        path("bmgt435-service/admin/", admin.site.urls),
+        path("bmgt435-service/", include("bmgt435_elp.urls")),
+    ] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+else:
+    urlpatterns = [
+        path("bmgt435-service/admin/", admin.site.urls),
+        path("bmgt435-service/", include("bmgt435_elp.urls")),
+    ]

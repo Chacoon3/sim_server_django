@@ -1,5 +1,6 @@
 from pathlib import Path
 from .config import AppConfig
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,8 +11,10 @@ SECRET_KEY = 'django-insecure-7+pi0)&orq-c)01-0vt$^=^jhs-m$)t3b7h-sx!i+#)lwbs^u5
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = AppConfig.APP_DEBUG
-if DEBUG:
-    print('Base dir is \t', BASE_DIR)
+if DEBUG == True:
+    print("running in debug mode")
+else:
+    print("running in production mode")
 
 
 ALLOWED_HOSTS = ['app', 'localhost', '127.0.0.1', AppConfig.APP_FRONTEND_HOST]
@@ -144,8 +147,15 @@ STATIC_URL = 'bmgt435-service/static/'
 
 STATIC_ROOT = BASE_DIR.absolute().as_posix() + '/static/'
 
-if DEBUG:
-    print('Static root is \t', STATIC_ROOT)
+MEDIA_URL = 'bmgt435-service/media/'
+
+MEDIA_ROOT = BASE_DIR.absolute().as_posix() + '/media/'
+
+if not os.path.exists(MEDIA_ROOT):
+    os.makedirs(MEDIA_ROOT)
+case_records_dir = MEDIA_ROOT + 'bmgt435/case-records/'
+if not os.path.exists(case_records_dir):
+    os.makedirs(case_records_dir)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
