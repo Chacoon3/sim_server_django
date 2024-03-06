@@ -41,6 +41,7 @@ urlpatterns = [
 
     path('api/manage/case-submissions/limit', ManageApi.case_submission_limit,),
     path('api/manage/case-submissions', ManageApi.case_submissions,),
+    path("api/manage/case-visibility", ManageApi.case_visibility,),
 
     path('api/manage/case-config/update', ManageApi.set_case_config,),
     path('api/manage/case-config/view', ManageApi.view_case_config,),

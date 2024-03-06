@@ -280,7 +280,7 @@ class CaseApi:
     @require_GET
     @staticmethod
     def cases_paginated(request: HttpRequest) -> HttpResponse:
-        data = generic_paginated_query(BMGTCase, pager_params_from_request(request))
+        data = generic_paginated_query(BMGTCase, pager_params_from_request(request), visible = True)
         return _resolvePaginatedData(data)
 
 
@@ -520,6 +520,37 @@ class ManageApi:
         data = generic_paginated_query(BMGTCaseConfig, pager_params)
         return _resolvePaginatedData(data)
     
+
+    @staticmethod
+    def __set_case_visibility(request: HttpRequest) -> None:
+        data = json.loads(request.body)
+        case_id = data['case_id']
+        visible = bool(data['visible'])
+        caseObj = BMGTCase.objects.get(id=case_id)
+        caseObj.visible = visible
+        caseObj.save()
+        resp = AppResponse()
+        resp.resolve(f"Case visibility set to {visible}!")
+        return resp
+
+
+    @staticmethod
+    def __get_case_visibility(request: HttpRequest) -> None:
+        case_id = request.GET.get('case_id')
+        caseObj = BMGTCase.objects.get(id=case_id)
+        resp = AppResponse()
+        resp.resolve(caseObj.visible)
+        return resp
+
+
+    @request_error_handler
+    @require_http_methods(["POST", "GET"])
+    @staticmethod
+    def case_visibility(request: HttpRequest) -> HttpResponse:
+        if request.method == "POST":
+            return ManageApi.__set_case_visibility(request)
+        elif request.method == "GET":
+            return ManageApi.__get_case_visibility(request)
 
     @request_error_handler
     @require_GET
