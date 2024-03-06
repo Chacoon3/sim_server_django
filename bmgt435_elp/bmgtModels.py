@@ -258,22 +258,6 @@ class BMGTTransaction(BMGTModelBase):
             ip=self.ip,
             device=self.device,
         )
-
-
-class BMGTFeedback(BMGTModelBase):
-
-    id = models.AutoField(auto_created=True, primary_key=True, null=False)
-    user = models.ForeignKey(BMGTUser, on_delete=models.SET_NULL, null=True,)
-    content = models.TextField(null=False, default='')
-
-    def as_dictionary(self) -> dict:
-        return dict(
-            id=self.id,
-            create_time=self.formatted_create_time,
-            user_id=self.user.id,
-            user_name=self.user.name,
-            content=self.content,
-        )
     
 
 class BMGTSystemStatus(BMGTModelBase):

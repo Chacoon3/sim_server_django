@@ -1,24 +1,19 @@
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, ValidationError
 from django.db import IntegrityError, OperationalError
-from django.core.paginator import Paginator, EmptyPage
+from django.core.paginator import Paginator
 from django.db.models import Model
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from http import HTTPStatus
 from .jsonUtils import CustomJSONEncoder
 from ..simulation.Core import SimulationException
-from ..bmgtModels import BMGTTransaction
+from ..bmgtModels import BMGTTransaction, BMGTModelBase
 
 import regex as re
 import json
 
 
-__BATCH_QUERY_SIZE = 40
 __DEFAULT_ORDER=['-id']
-
-
-def __get_batch_size(listObj):
-    return min(len(listObj), __BATCH_QUERY_SIZE)
 
 
 def request_error_handler(func):
@@ -29,7 +24,7 @@ def request_error_handler(func):
     def wrapped(request, *args, **kwargs) -> HttpResponse:
         try:
             return func(request, *args, **kwargs)
-
+        
         except json.JSONDecodeError as e:
             resp = AppResponse()
             resp.reject(e.args[0])
@@ -128,36 +123,27 @@ def pager_params_from_request(request: HttpRequest) -> dict:
     }
 
 
-def generic_paginated_query(dbModel: Model, pager_params, **kwargs) -> HttpResponse:
+def generic_paginated_query(dbModel: Model, pager_params, **kwargs) -> dict:
     """
     generic paginated query on one table
     pass in a model class and a request object    
     kwargs: filter conditions
     """
-    try:
-        resp = AppResponse()
+    obj_set = dbModel.objects.filter(**kwargs)
+    order = pager_params.get('order', __DEFAULT_ORDER)
+    obj_set = obj_set.order_by(*order)
+    pager = Paginator(obj_set, pager_params['size'])
+    page = pager_params['page']
 
-        obj_set = dbModel.objects.filter(**kwargs)
-        order = pager_params.get('order', __DEFAULT_ORDER)
-        obj_set = obj_set.order_by(*order)
-        pager = Paginator(obj_set, pager_params['size'])
-        page = pager_params['page']
-
-        if page > pager.num_pages or page < 1:
-            resp.reject("Page not found!")
-        else:
-            resp.resolve({
-                "page": page,
-                "totalPage": pager.num_pages,
-                "data":pager.page(page).object_list,
-            })
-        
-    except EmptyPage:
-        resp.reject("Page empty!")
-    except KeyError:
-        resp.reject("Missing pagination parameters!")
-
-    return resp
+    if page > pager.num_pages or page < 1:
+        raise ValueError("Invalid page number")
+    else:
+        pageData = {
+            'page': page,
+            'totalPage': pager.num_pages,
+            'data': [model.as_dictionary() for model in pager.page(page)]
+        }
+        return pageData
 
 
 def __log_event(request: HttpRequest, status_code: int):

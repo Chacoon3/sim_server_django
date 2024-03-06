@@ -12,6 +12,7 @@ from .utils.apiUtils import request_error_handler, password_valid, generic_pagin
 import pandas as pd
 import json
 import io
+import os
 
 """
 All requests have been verified to have valid user id except for those of the Auth.
@@ -31,10 +32,15 @@ def _get_session_user(request: HttpRequest) -> BMGTUser:
 
     try:
         user: BMGTUser = request.app_user
-    except:
+    except: # fallback
         id = request.COOKIES.get('id', None)
         user = BMGTUser.objects.get(id=id, activated=True,)
     return user
+
+def _resolvePaginatedData(data: dict, resp: AppResponse = None) -> AppResponse:
+    resp = resp or AppResponse()
+    resp.resolve(data)
+    return resp
 
 
 class AuthApi:
@@ -115,14 +121,13 @@ class AuthApi:
     @staticmethod
     def sign_out(request: HttpRequest) -> HttpResponse:
         try:
-            id = request.COOKIES.get('id', None)
-            user = BMGTUser.objects.get(id=id, activated=True,)
             resp = AppResponse()
+            id = request.COOKIES.get('id', None)
+            user = BMGTUser.objects.get(id=id, activated=True)
             resp.resolve("Sign out success!")
             AuthApi.__clear_auth_cookie(resp)
-        except (BMGTUser.DoesNotExist, KeyError) as e:
-            resp.reject("User not found!")
-
+        except Exception as e:
+            resp.reject("Sign out failed!")
         return resp
 
 
@@ -188,7 +193,8 @@ class GroupApi:
         params = pager_params_from_request(request)
         if user.role == BMGTUser.BMGTUserRole.USER: # normal user only see groups in the same semester
             params['semester'] = user.semester
-        return generic_paginated_query(BMGTGroup, params)
+        data = generic_paginated_query(BMGTGroup, params)
+        return _resolvePaginatedData(data)
     
 
     @request_error_handler
@@ -266,7 +272,6 @@ class CaseApi:
             resp.reject("Case not found!")
         except KeyError:
             resp.reject("Invalid data format!")
-            
         return resp
     
 
@@ -274,7 +279,8 @@ class CaseApi:
     @require_GET
     @staticmethod
     def cases_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_query(BMGTCase, pager_params_from_request(request))
+        data = generic_paginated_query(BMGTCase, pager_params_from_request(request))
+        return _resolvePaginatedData(data)
 
 
     @request_error_handler
@@ -320,6 +326,7 @@ class CaseApi:
                         file.write(caseRecordStream.getvalue())
                     case_record.state = BMGTCaseRecord.State.SUCCESS
                     case_record.score = res.score
+                    case_record.performance_metric = res.performance_metric
                     case_record.save()
                     resp.resolve({
                         "case_record_id": case_record.id,
@@ -382,9 +389,12 @@ class CaseRecordApi:
     @staticmethod
     def download_case_record(request: HttpRequest, file_name:str) -> HttpResponse:
         full_path = _CASE_RECORD_PATH + file_name
-        with open(full_path, 'rb') as file:
-            response = HttpResponse(file.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',)
-            return response
+        if os.path.exists(full_path):
+            with open(full_path, 'rb') as file:
+                response = HttpResponse(file.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',)
+                return response
+        else:
+            return AppResponse().reject("File not found!")
         
 
     @request_error_handler
@@ -394,8 +404,8 @@ class CaseRecordApi:
         user: BMGTUser = _get_session_user(request)
         group = user.group
         pagerParams = pager_params_from_request(request)
-        return generic_paginated_query(BMGTCaseRecord, pagerParams, state=BMGTCaseRecord.State.SUCCESS, group_id=group)
-
+        data = generic_paginated_query(BMGTCaseRecord, pagerParams, state=BMGTCaseRecord.State.SUCCESS, group_id=group)
+        return _resolvePaginatedData(data)
 
     @request_error_handler
     @require_GET
@@ -403,15 +413,18 @@ class CaseRecordApi:
         try:
             resp = AppResponse()
             case_id = int(request.GET.get('case_id'))
+            user = _get_session_user(request)
             if case_id == 1:
                 page = int(request.GET.get('page', None))
                 size = int(request.GET.get('size', None))
                 query_params = create_pager_params(page, size, ['-performance_metric', '-score'])
-                return generic_paginated_query(
+                data = generic_paginated_query(
                     BMGTCaseRecord, query_params,
+                    user__semester=user.semester,
                     state=BMGTCaseRecord.State.SUCCESS,
-                    case_id=case_id
+                    case_id=case_id,
                     )
+                resp.resolve(data)
             else:
                 raise BMGTCase.DoesNotExist
         except KeyError:
@@ -499,14 +512,16 @@ class ManageApi:
     def  view_case_config(request: HttpRequest) -> HttpResponse:
         pager_params = pager_params_from_request(request)
         pager_params['case_id'] = _FOOD_DELIVERY_CASE_ID
-        return generic_paginated_query(BMGTCaseConfig, pager_params)
+        data = generic_paginated_query(BMGTCaseConfig, pager_params)
+        return _resolvePaginatedData(data)
     
 
     @request_error_handler
     @require_GET
     @staticmethod
     def view_users(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_query(BMGTUser, pager_params_from_request(request))
+        data = generic_paginated_query(BMGTUser, pager_params_from_request(request))
+        return _resolvePaginatedData(data)
     
     @request_error_handler
     @require_POST
@@ -610,7 +625,8 @@ class ManageApi:
             resp = AppResponse()
             case_id = request.GET.get('case_id')
             pagerParams = pager_params_from_request(request)
-            return generic_paginated_query(BMGTCaseRecord, pagerParams, case_id=case_id)
+            data = generic_paginated_query(BMGTCaseRecord, pagerParams, case_id=case_id)
+            resp.resolve(data)
         except BMGTCase.DoesNotExist:
             resp.reject("Case not found!")
         except KeyError:
@@ -697,14 +713,14 @@ class ManageApi:
             resp.reject("Invalid data format!")
         except Exception as e:
             resp.reject(e)
-        
         return resp
     
     @request_error_handler
     @require_GET
     @staticmethod
     def group_view_paginated(request: HttpRequest) -> HttpResponse:
-        return generic_paginated_query(BMGTGroup, pager_params_from_request(request))
+        data = generic_paginated_query(BMGTGroup, pager_params_from_request(request))
+        return _resolvePaginatedData(data)
     
     @request_error_handler
     @require_POST 
@@ -723,34 +739,29 @@ class ManageApi:
         except KeyError:
             resp.reject("Invalid data format!")
         return resp
-
-
-# class FeedbackApi:
-
-#     @request_error_handler
-#     @require_POST
-#     @staticmethod
-#     def post(request: HttpRequest) -> HttpResponse:
-#         try:
-#             resp = AppResponse()
-#             data = json.loads(request.body)
-#             user: BMGTUser = _get_session_user(request)
-#             content = data.get('content')
-#             if content:
-#                 feedback = BMGTFeedback(user=user, content=content)
-#                 feedback.save()
-#                 resp.resolve("Feedback submitted!")
-#             else:
-#                 resp.reject("Feedback cannot be empty!")  
-#         except KeyError:
-#             resp.reject("Invalid data format!")
-#         except Exception as e:
-#             resp.reject(e)
-        
-#         return resp
     
-#     @request_error_handler
-#     @require_GET
-#     @staticmethod
-#     def feedback_paginated(request: HttpRequest) -> HttpResponse:
-#         return generic_paginated_query(BMGTFeedback, pager_params_from_request(request))
+
+def apiStartUp():
+    # handle previous case records that do not have performance metric
+    records = BMGTCaseRecord.objects.filter(performance_metric__isnull=True, state = BMGTCaseRecord.State.SUCCESS)
+    if records.exists():
+        for r in records:
+            summary = json.loads(r.summary_dict.replace("\'", "\""))
+            r.performance_metric = summary['perf_metric']
+            r.save()
+
+    # create default case objects if not exist
+    try:
+        BMGTCase.objects.get(id=_FOOD_DELIVERY_CASE_ID)
+    except BMGTCase.DoesNotExist:
+        foodCenter = BMGTCase(id=_FOOD_DELIVERY_CASE_ID, name="Food Delivery", max_submission=-1, visible=False)
+        foodCenter.save()
+
+    try:
+        BMGTCase.objects.get(id=_CALL_CENTER_CASE_ID)
+    except BMGTCase.DoesNotExist:
+        callCenter = BMGTCase(id=_CALL_CENTER_CASE_ID, name="Call Center", max_submission=-1, visible=False)
+        callCenter.save()         
+
+
+apiStartUp()
