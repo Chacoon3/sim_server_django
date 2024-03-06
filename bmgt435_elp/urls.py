@@ -35,7 +35,7 @@ urlpatterns = [
     path('api/manage/users/view', ManageApi.view_users,),
     path('api/manage/users/delete', ManageApi.delete_users,),
 
-    path('api/manage/groups/create', ManageApi.create_group,),
+    path('api/manage/groups/create', ManageApi.create_groups,),
     path('api/manage/groups/paginated', ManageApi.group_view_paginated,),
     path('api/manage/groups/delete', ManageApi.delete_group,),
 

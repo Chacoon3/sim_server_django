@@ -350,7 +350,7 @@ class FoodDelivery(SimulationCase):
         output['total_fixed_cost'] = len(
             centers) * self.__num_weeks * FoodDelivery.__center_weekly_cost
         output['perf_metric'] = round(
-            output['total_revenue'] - output['total_shortage_amount'] -
+            output['total_revenue'] - output['total_shortage_amount'] - \
             output['total_fixed_cost'] - output['total_holding_cost'],
             2
         )

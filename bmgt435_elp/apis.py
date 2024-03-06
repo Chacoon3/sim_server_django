@@ -192,8 +192,9 @@ class GroupApi:
         user: BMGTUser = _get_session_user(request)
         params = pager_params_from_request(request)
         if user.role == BMGTUser.BMGTUserRole.USER: # normal user only see groups in the same semester
-            params['semester'] = user.semester
-        data = generic_paginated_query(BMGTGroup, params)
+            data = generic_paginated_query(BMGTGroup, params, semester_id=user.semester.id)
+        else:
+            data = generic_paginated_query(BMGTGroup, params)
         return _resolvePaginatedData(data)
     
 
@@ -401,11 +402,15 @@ class CaseRecordApi:
     @require_GET
     @staticmethod
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
+        resp = AppResponse()
         user: BMGTUser = _get_session_user(request)
-        group = user.group
-        pagerParams = pager_params_from_request(request)
-        data = generic_paginated_query(BMGTCaseRecord, pagerParams, state=BMGTCaseRecord.State.SUCCESS, group_id=group)
-        return _resolvePaginatedData(data)
+        if not user.group:
+            resp.reject("You must join a group to view case records!")
+        else:
+            pagerParams = pager_params_from_request(request)
+            data = generic_paginated_query(BMGTCaseRecord, pagerParams, state=BMGTCaseRecord.State.SUCCESS, group_id=user.group.id)
+            _resolvePaginatedData(data, resp=resp)
+        return resp
 
     @request_error_handler
     @require_GET
@@ -532,9 +537,12 @@ class ManageApi:
             data = json.loads(request.body)
             arr_user_id = data['arr_user_id']
             users = BMGTUser.objects.filter(id__in=arr_user_id)
-            with transaction.atomic():
-                users.delete()
-            resp.resolve("Users deleted!")
+            if users.filter(role = BMGTUser.BMGTUserRole.ADMIN).exists():
+                resp.reject("Cannot delete admin users!") 
+            else:
+                with transaction.atomic():
+                    users.delete()
+                resp.resolve("Users deleted!")
         except BMGTUser.DoesNotExist:
             resp.reject("User not found!")
         except KeyError:
@@ -695,14 +703,14 @@ class ManageApi:
     @request_error_handler
     @require_POST
     @staticmethod
-    def create_group(request: HttpRequest) -> HttpResponse:
+    def create_groups(request: HttpRequest) -> HttpResponse:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
             semester_id = data['semester_id']
             size = int(data['size'])
             semester = BMGTSemester.objects.get(id=semester_id)
-            max_group_num = BMGTGroup.objects.aggregate(max_value=Max('number'))['max_value'] or 0
+            max_group_num = BMGTGroup.objects.filter(semester_id = semester_id).aggregate(max_value=Max('number'))['max_value'] or 0
             BMGTGroup.objects.bulk_create(
                 [BMGTGroup(number=max_group_num + i + 1, semester=semester) for i in range(size)]
             )

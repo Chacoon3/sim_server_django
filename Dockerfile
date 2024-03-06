@@ -15,6 +15,7 @@ FROM base AS production
 
 ENV PYTHONDONTWRITEBYTECODE=0
 ENV PYTHONUNBUFFERED=0
+ENV WORKERS=4
 
 # Copy the source code into the container.
 COPY ./bmgt435_elp ./bmgt435_elp
@@ -34,5 +35,5 @@ EXPOSE 8000
 CMD python manage.py makemigrations bmgt435_elp && \
     python manage.py migrate && \
     # daphne -b 0.0.0.0 -p 8000 sim_server_django.asgi:application
-    gunicorn -b 0.0.0.0:8000 sim_server_django.wsgi:application -w 4
+    gunicorn -b 0.0.0.0:8000 sim_server_django.wsgi:application -w $WORKERS
 # CMD python manage.py makemigrations && python manage.py migrate && python manage.py runserver
