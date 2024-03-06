@@ -30,7 +30,11 @@
 **/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
+**/migrations/
+**/media/
 LICENSE
 README.md
-./bmgt435_elp/migrations/*
+./bmgt435_elp/migrations/
 *.conf
+*.pyc
+db.sqlite3

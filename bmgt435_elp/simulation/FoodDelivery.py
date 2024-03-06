@@ -1,23 +1,40 @@
 import openpyxl
+import copy
 import io
 import numpy as np
 import pandas as pd
 import scipy.stats
-from .Core import CaseBase, SimulationException, SimulationResult
+from .Core import SimulationCase, SimulationException, SimulationResult
+from typing import Union
 
 
 class FoodDeliveryResult(SimulationResult):
 
-    def detail_as_excel_stream(self):
+    def __init__(self, centers, policies, score: float, perfMetric: float, summaryData, iterationData) -> None:
+        super().__init__(score, summaryData, iterationData)
+        self.__centers = centers
+        self.__policies = policies
+        self.__perfMetric = perfMetric
+
+    @property
+    def performance_metric(self) -> float:
+        return self.__perfMetric
+
+    def asFileStream(self) -> io.BytesIO:
         wb = openpyxl.Workbook(write_only=True)
         main_sheet = wb.create_sheet('main')
-        main_sheet.append(self.aggregation_dataframe.columns.tolist())
-        for row in self.aggregation_dataframe.values.tolist():
+        main_sheet.append(['Decision Variables'])
+        main_sheet.append(['center', 's', 'S'])
+        for center, policy in zip(self.__centers, self.__policies):
+            main_sheet.append([center, policy[0], policy[1]])
+
+        main_sheet.append(self.summaryData.columns.tolist())
+        for row in self.summaryData.values.tolist():
             main_sheet.append(row)
         
         detail_sheet = wb.create_sheet('detail')
-        detail_sheet.append(self.iteration_dataframe.columns.tolist())
-        for row in self.iteration_dataframe.values.tolist():
+        detail_sheet.append(self.iterationData.columns.tolist())
+        for row in self.iterationData.values.tolist():
             detail_sheet.append(row)
     
         bytes_io = io.BytesIO()
@@ -26,11 +43,11 @@ class FoodDeliveryResult(SimulationResult):
         return bytes_io
     
 
-    def summary_as_dict(self):
-        return self.aggregation_dataframe.loc[0,].to_dict()
+    def asDict(self) -> dict:
+        return self.summaryData.loc[0,].to_dict()
 
 
-class FoodDelivery(CaseBase):
+class FoodDelivery(SimulationCase):
 
     class DeliveryHub(object):
         """
@@ -89,6 +106,8 @@ class FoodDelivery(CaseBase):
     __initial_inventory: int = 1000
     __max_weekly_restock: int = 7000
     __num_iterations: int = 1
+    perf_lower_bound: float = -1600000
+    perf_upper_bound: float = 1600000
 
     @staticmethod
     def __sim_center_demand():
@@ -112,10 +131,10 @@ class FoodDelivery(CaseBase):
     
     @staticmethod
     def is_config_valid(config:dict) -> bool:
-        if config is not None:
-            set_keys = set(config.keys())
-            set_values = set(config.values())
-            set_valid_values = set(FoodDelivery.__center_names)
+        if config:
+            set_keys = set[str]([str(k) for k in config.keys()])
+            set_values = set[str]([str(v) for v in config.values()])
+            set_valid_values = set[str](FoodDelivery.__center_names)
             input_mapper_valid = (set_keys == set_values and set_keys == set_valid_values and len(set_keys) == len(config.keys())) 
             return input_mapper_valid
         return False
@@ -124,17 +143,17 @@ class FoodDelivery(CaseBase):
     def __init__(
         self,
         centers: list[str] = [],
-        policies: list[tuple[int, int]] | list[list[int]] = [],
-        config: dict | None = None,
+        policies: list[list[int]] = [],
+        config: Union[dict, None] = None,
     ):
 
         super().__init__()
         self.__centers = centers
         self.__policies = policies
-        self.__config = config
-        self._assert_params()
+        self.__config = config  # this is for remapping the centers.
+        self.__assert_params()
 
-    def _assert_params(self) -> None:
+    def __assert_params(self) -> None:
         config_valid = self.__num_iterations > 0 and self.__num_weeks > 0
 
         format_valid = len(self.__centers) == len(self.__policies) and len(self.__centers) > 0
@@ -165,15 +184,13 @@ class FoodDelivery(CaseBase):
             raise SimulationException(
                 "Simulation failed. s policy must be non-negative and S policy must be greater than s policy")
 
-    perf_lower_bound = -800000
-    perf_upper_bound = 1200000
 
-
-    def score(self, obj) -> float:
+    def score(self, iterationStats) -> float:
         """
         returns the score of the simulation
         """
-        avg_profit = obj['perf_metric']
+
+        avg_profit = iterationStats['perf_metric']
         avg_profit = (avg_profit - FoodDelivery.perf_lower_bound) / \
             (FoodDelivery.perf_upper_bound - FoodDelivery.perf_lower_bound)
         avg_profit = 1 / (1 + np.exp(-avg_profit))
@@ -181,13 +198,7 @@ class FoodDelivery(CaseBase):
         return avg_profit
     
 
-    def meta_data(self):
-        return {
-            'num_iterations': self.__num_iterations,
-            'num_weeks': self.__num_weeks,
-        }
-
-    def simulate(self):
+    def simulate(self) -> object:
         # instantialize centers
         centers = [
             FoodDelivery.DeliveryHub(policy=policy, initial_inventory=FoodDelivery.__initial_inventory, name=center) for \
@@ -339,18 +350,20 @@ class FoodDelivery(CaseBase):
         output['total_fixed_cost'] = len(
             centers) * self.__num_weeks * FoodDelivery.__center_weekly_cost
         output['perf_metric'] = round(
-            output['total_revenue'] - output['total_shortage_amount'] -
+            output['total_revenue'] - output['total_shortage_amount'] - \
             output['total_fixed_cost'] - output['total_holding_cost'],
             2
         )
         return output
 
     def run(self):
-        if self.__config is not None:
+        original_centers = copy.deepcopy(self.__centers)
+        if self.__config is not None:   # remap centers
             self.__centers = [self.__config[c] for c in self.__centers]
         
         res = self.simulate()
         score = self.score(res)
+        performance_metric = res['perf_metric']
         history = res.pop('history')
         df_aggregated_statistics = pd.DataFrame(res, index=[0])
         arr_df_per_center_statistics = [
@@ -363,10 +376,10 @@ class FoodDelivery(CaseBase):
 
         df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
         
-        if self.__config is not None:
+        if self.__config is not None:   # reverse the remapping
             df_per_center_statistics['hub'] = df_per_center_statistics['hub'].map(
                 {v: k for k, v in self.__config.items()}
             )
 
-        simRes = FoodDeliveryResult(score, df_aggregated_statistics, df_per_center_statistics)
+        simRes = FoodDeliveryResult(original_centers, self.__policies, score, performance_metric, df_aggregated_statistics, df_per_center_statistics)
         return simRes

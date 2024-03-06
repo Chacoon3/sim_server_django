@@ -9,8 +9,4 @@ class BmgtPlatformConfig(AppConfig):
     verbose_name = "BMGT435 Experiential Learning Platform"
     
     
-    
 bmgt435_file_system = FileSystemStorage(location=settings.STATIC_ROOT + "bmgt435/", base_url=settings.STATIC_URL + "bmgt435/")
-print("location", bmgt435_file_system.location)
-print("base location", bmgt435_file_system.base_location)
-print("base url", bmgt435_file_system.base_url)

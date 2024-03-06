@@ -7,10 +7,8 @@ class AppConfig:
     application configuration
     """
 
-    APP_DEBUG = os.environ.get("APP_DEBUG", True)
-
+    APP_DEBUG = int(os.environ.get("APP_DEBUG", 1)) == 1
     APP_FRONTEND_HOST = os.environ.get("APP_FRONTEND_HOST", "localhost:4173")
-
     APP_USE_MYSQL = os.environ.get("APP_USE_MYSQL", False)
     APP_MYSQL_HOST = os.environ.get("APP_MYSQL_HOST", "localhost")
     APP_MYSQL_PORT = os.environ.get("APP_MYSQL_PORT", 3306)

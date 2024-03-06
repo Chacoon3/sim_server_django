@@ -56,17 +56,17 @@ def AuthenticationMiddleware(get_response):
             return AppResponse(reject=failedPrompt)
         
         require_admin = request.path.startswith("/bmgt435-service/api/manage/")
-        query = BMGTUser.objects.filter(id=user_id, activated=True)
-        if query.exists():
-            user = query.get()
+        try:
+            user = BMGTUser.objects.get(id=user_id, activated=True)
+            request.app_user = user
             if require_admin:
                 if user.role == ADMIN:
                     return get_response(request)
                 else:
                     return AppResponse(reject=failedPrompt)
             else:   
-                 return get_response(request)
-        else:
+                return get_response(request)
+        except BMGTUser.DoesNotExist:
             return AppResponse(reject=failedPrompt)
 
     return middleware

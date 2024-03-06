@@ -1,21 +1,19 @@
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned, ValidationError
 from django.db import IntegrityError, OperationalError
-from django.core.paginator import Paginator, EmptyPage
+from django.core.paginator import Paginator
+from django.db.models import Model
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 from http import HTTPStatus
 from .jsonUtils import CustomJSONEncoder
 from ..simulation.Core import SimulationException
-from ..bmgtModels import BMGTTransaction
+from ..bmgtModels import BMGTTransaction, BMGTModelBase
 
 import regex as re
 import json
 
 
-__BATCH_QUERY_SIZE = 40
-
-
-def get_batch_size(listObj):
-    return min(len(listObj), __BATCH_QUERY_SIZE)
+__DEFAULT_ORDER=['-id']
 
 
 def request_error_handler(func):
@@ -26,7 +24,7 @@ def request_error_handler(func):
     def wrapped(request, *args, **kwargs) -> HttpResponse:
         try:
             return func(request, *args, **kwargs)
-
+        
         except json.JSONDecodeError as e:
             resp = AppResponse()
             resp.reject(e.args[0])
@@ -68,16 +66,12 @@ def request_error_handler(func):
             resp.reject(e.args[0])
             
         except Exception as e:
-            # resp = HttpResponse()
-            # resp.reject(e.args[0])
-            # resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
-
-            # if settings.DEBUG:
-            raise
-            # else:
-                # resp = HttpResponse()
-                # resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
-                # resp.write("Internal server error!")
+            if settings.DEBUG:
+                raise
+            else:
+                resp = HttpResponse()
+                resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+                resp.write("Internal server error!")
         
         return resp
 
@@ -95,15 +89,13 @@ def password_valid(password: str) -> bool:
     return leng_valid and has_char and has_num
 
 
-def create_pager_params(page: int, size: int, asc: int, order: str) -> dict:
+def create_pager_params(page: int, size: int, order: list[str]) -> dict:
     """
     convert get parameters to pagination parameters for paginated query
     """
-
     params = {}
     params['page'] = page
     params['size'] = size
-    params['asc'] = asc
     params['order'] = order
     return params
 
@@ -112,51 +104,46 @@ def pager_params_from_request(request: HttpRequest) -> dict:
     """
     convert get parameters to pagination parameters for paginated query
     """
-
-    params = {}
-    params['page'] = request.GET.get('page', None)
-    params['size'] = request.GET.get('size', None)
-    params['asc'] = request.GET.get('asc', '1')
-    params['order'] = request.GET.get('order', 'id')
-    if not params['page'] or not params['size']:
-        raise KeyError("missing pagination parameters")
-    params['page'] = int(params['page'])
-    params['size'] = int(params['size'])
-    if not params['size'] > 0:
+    
+    page = int(request.GET['page'])
+    size = int(request.GET['size'])
+    order = request.GET.get('order', None)
+    if order:
+        order = order.split('0')
+    else:
+        order = __DEFAULT_ORDER
+    if not size > 0:
         raise ValueError("invalid page size")
-    return params
+    if not page > 0:
+        raise ValueError("invalid page number")
+    return {
+        'page': page,
+        'size': size,
+        'order': order
+    }
 
 
-def generic_paginated_query(dbModel, pager_params, **kwargs) -> HttpResponse:
+def generic_paginated_query(dbModel: Model, pager_params, **kwargs) -> dict:
     """
     generic paginated query on one table
     pass in a model class and a request object    
     kwargs: filter conditions
     """
-    try:
-        resp = AppResponse()
+    obj_set = dbModel.objects.filter(**kwargs)
+    order = pager_params.get('order', __DEFAULT_ORDER)
+    obj_set = obj_set.order_by(*order)
+    pager = Paginator(obj_set, pager_params['size'])
+    page = pager_params['page']
 
-        obj_set = dbModel.objects.filter(**kwargs)
-        obj_set = obj_set.order_by(
-            pager_params['order'] if pager_params['asc'] else '-'+pager_params['order'])
-        pager = Paginator(obj_set, pager_params['size'])
-        page = pager_params['page']
-
-        if page > pager.num_pages or page < 1:
-            resp.reject("Page not found!")
-        else:
-            resp.resolve({
-                "page": page,
-                "totalPage": pager.num_pages,
-                "data":pager.page(page).object_list,
-            })
-        
-    except EmptyPage:
-        resp.reject("Page empty!")
-    except KeyError:
-        resp.reject("Missing pagination parameters!")
-
-    return resp
+    if page > pager.num_pages or page < 1:
+        raise ValueError("Invalid page number")
+    else:
+        pageData = {
+            'page': page,
+            'totalPage': pager.num_pages,
+            'data': [model.as_dictionary() for model in pager.page(page)]
+        }
+        return pageData
 
 
 def __log_event(request: HttpRequest, status_code: int):
