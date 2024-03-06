@@ -8,7 +8,7 @@ media
 static
 migrations/
 *.conf
-
+.vscode
 # Backup files # 
 *.bak 
 
