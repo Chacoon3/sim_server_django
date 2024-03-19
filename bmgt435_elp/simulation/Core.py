@@ -49,7 +49,6 @@ class AppPriorityQueue(object):
     def __init__(self) -> None:
         self.__list = list[_PrioritizedItem]()
         self._count = 0
-        self.__cursor = 0
 
     def enqueue(self, priority:float, item):
         priorityItem = _PrioritizedItem(priority, item)
@@ -74,6 +73,32 @@ class AppPriorityQueue(object):
             self.__siftdown(last, 0, len(items))
         self._count -= 1
         return item.item
+    
+    def tryDequeueItem(self, item) -> bool:
+        """
+        remove a specific item from the queue
+        """
+        index = -1
+        for i in range(self._count):
+            if self.__list[i].item == item:
+                index =  i
+                break
+        if index < 0:
+            return False
+        if index == self._count - 1:
+            self.__list.pop()
+            self._count -= 1
+            return True
+        if self._count == 1:
+            self.__list.pop()
+            self._count -= 1
+            return True
+        last = self.__list[self._count - 1]
+        self.__list.pop()
+        self._count -= 1
+        self.__list[index] = last
+        self.__siftdown(last, index, self._count)
+        return True
     
     def __siftdown(self, priorityItem:_PrioritizedItem, start:int, end:int):
         elements, i, j = self.__list, start, start*2+1
@@ -214,7 +239,7 @@ class DiscreteEventCase(SimulationCase):
 
 class ResourceQueue(AppPriorityQueue):
     """
-    priority queue for system recourse
+    priority queue for recourse
     """
 
     def __init__(self, system: DiscreteEventCase) -> None:
@@ -235,7 +260,13 @@ class ResourceQueue(AppPriorityQueue):
         item = super().dequeue()
         time = self.__system.systemTime
         self.__queueLength[time]  = self._count
-        return item
+        return item      
+
+    def tryDequeueItem(self, item) -> bool:
+        res = super().tryDequeueItem(item)
+        time = self.__system.systemTime
+        self.__queueLength[time]  = self._count
+        return res    
         
     @property
     def queueLengthRecord(self) -> dict[float, int]:

@@ -43,11 +43,21 @@ class Customer:
         self.__serviceTime: float = None
         self.__exitTime:float = None
         self.__enqueueTime:float = None
+        self.__dequeueTime:float = None
         self.__serviceStartTime:float = None
+        self.__renege = False
 
     @property
     def id(self) -> int:
         return self.__id
+    
+    @property
+    def renege(self) -> bool:
+        return self.__renege
+    
+    @renege.setter
+    def renege(self, value:bool):
+        self.__renege = value
     
     @property
     def offerType(self) -> int:
@@ -104,10 +114,22 @@ class Customer:
         self.__serviceStartTime = value
 
     @property
-    def waitTime(self) -> Union[float, None]:
-        if self.__enqueueTime is None or self.__serviceStartTime is None:
+    def dequeueTime(self) -> Union[float, None]:
+        return self.__dequeueTime
+    
+    @dequeueTime.setter
+    def dequeueTime(self, value:float):
+        if self.__dequeueTime is not None:
+            raise SimulationException("Invalid dequeue time. Customer has already dequeued!")
+        if value < self.__enqueueTime:
+            raise SimulationException("Invalid dequeue time. Dequeue time cannot be less than enqueue time!")
+        self.__dequeueTime = value
+
+    @property
+    def timeInQueue(self) -> Union[float, None]:
+        if self.__enqueueTime is None or self.__dequeueTime is None:
             return None
-        return self.__serviceStartTime - self.__enqueueTime
+        return self.__dequeueTime - self.__enqueueTime
     
     @property
     def serviceTime(self) -> Union[float, None]:
@@ -230,14 +252,13 @@ class CallCenterCase(DiscreteEventCase):
             self.maxServiceTime: float = None
             self.avgServiceTime: float = None
 
-            self.maxWaitTime: float = None
-            self.avgWaitTime: float = None
-
             self.qualityOfService: float = None
             self.agentUtilizationRate: float = None
 
             self.customerArrived: int = None
             self.customerServed: int = None
+
+            self.renegeRate: float = None
 
             self.avgQueueLengthOverTime: float = None
             self.maxQueueLength: int = None
@@ -258,6 +279,10 @@ class CallCenterCase(DiscreteEventCase):
     __lv1AgentsCount: int = 15
 
     __TypeDecomposition = list[tuple[list[list[int]], int]]
+
+    @staticmethod
+    def callbackRate() -> float:
+        return 0.3
 
     @staticmethod
     def __validateInput(decision:list[int]):
@@ -342,6 +367,7 @@ class CallCenterCase(DiscreteEventCase):
         self.__endTime = 3600 * 9  # 9 hours
         self.__customers = list[Customer]() # records all customers
         self.__customerQueue = ResourceQueue(self)  # priority queues for customers
+        self.__callbackQueue  = ResourceQueue(self)  # priority queues for callback tasks
         self.__agents = [list[Agent]() for _ in range(3)]  # empty lists for lv1, lv2, lv3 agents
   
 
@@ -359,6 +385,10 @@ class CallCenterCase(DiscreteEventCase):
     def customerQueue(self) -> ResourceQueue:
         return self.__customerQueue
     
+    @property
+    def callbackQueue(self) -> ResourceQueue:
+        return self.__callbackQueue
+    
     def getIdelAgent(self) -> Union[Agent, None]:
         for lv in range(3):
             agentsArr = self.__agents[lv]
@@ -371,10 +401,10 @@ class CallCenterCase(DiscreteEventCase):
         if event.time < self.systemTime:
             raise SimulationException(f"Invalid event time. Event time cannot be in the past! Current time: {self.systemTime}, event time: {event.time}")
         eventType = type(event)
-        if eventType == CallArrive or eventType == ServiceStart or eventType == ServiceEnd or eventType == AgentOnSchedule:
+        if issubclass(eventType, CallCenterEvent):
             self._eventQueue.enqueue(event.time, event)
         else:
-            raise SimulationException(f"Invalid event. Event type {type(event)} not recognized!")
+            raise SimulationException(f"Invalid event. Event type {eventType} not recognized!")
         
     @property
     def endTime(self) -> float:
@@ -388,7 +418,7 @@ class CallCenterCase(DiscreteEventCase):
         one of the two performance measures described in the original paper
         """
         totalCalls = len(self.__customers)
-        qualifiedCalls = len([c for c in self.__customers if c.waitTime is not None and c.waitTime <= x])
+        qualifiedCalls = len([c for c in self.__customers if c.renege == False and c.timeInQueue is not None and c.timeInQueue <= x])
         return round(qualifiedCalls / totalCalls * 100, 4)
 
 
@@ -406,6 +436,7 @@ class CallCenterCase(DiscreteEventCase):
         self._eventQueue.clear()
         self.__customerQueue.clear()
         self.__customers.clear()
+        self.__callbackQueue.clear()
         for agents in self.__agents:
             agents.clear()
 
@@ -424,7 +455,7 @@ class CallCenterCase(DiscreteEventCase):
                 startTimes = [interval[0] for interval in agent.schedule]
                 for t in startTimes:
                     if t > 0:
-                        agentOnSchedule = AgentOnSchedule(t, agent, self)
+                        agentOnSchedule = AgentOnSchedule(t, self, agent)
                         self.addEvent(agentOnSchedule)
 
 
@@ -439,14 +470,11 @@ class CallCenterCase(DiscreteEventCase):
         # calculate and return iteration stats
         stats = self.IterationStats()
 
-        stats.maxTimeInQueue = np.max([c.waitTime for c in self.__customers if c.waitTime is not None]),
-        stats.avgTimeInQueue = np.mean([c.waitTime for c in self.__customers if c.waitTime is not None]),
+        stats.maxTimeInQueue = np.max([c.timeInQueue for c in self.__customers if c.timeInQueue is not None]),
+        stats.avgTimeInQueue = np.mean([c.timeInQueue for c in self.__customers if c.timeInQueue is not None]),
 
         stats.maxServiceTime = np.max([c.serviceTime for c in self.__customers if c.serviceTime is not None]),
         stats.avgServiceTime = np.mean([c.serviceTime for c in self.__customers if c.serviceTime is not None]),
-
-        stats.maxWaitTime = np.max([c.waitTime for c in self.__customers if c.waitTime is not None]),
-        stats.avgWaitTime = np.mean([c.waitTime for c in self.__customers if c.waitTime is not None])
 
         stats.qualityOfService = self.qualityOfService(60)  # this is the performance measure described in the original paper
         stats.agentUtilizationRate = self.agentUtilizationRate()
@@ -456,6 +484,8 @@ class CallCenterCase(DiscreteEventCase):
 
         stats.maxQueueLength = np.max(self.__customerQueue.maxQueueLength)
         stats.avgQueueLengthOverTime = self.__customerQueue.avgQueueLengthOverTime(0, self.endTime)
+
+        stats.renegeRate = len([c for c in self.__customers if c.renege]) / len(self.__customers)
 
         return stats
   
@@ -473,14 +503,13 @@ class CallCenterCase(DiscreteEventCase):
 
         avgMaxServiceTime = np.mean([s.maxServiceTime for s in iterationStats])
         avgAvgServiceTime = np.mean([s.avgServiceTime for s in iterationStats])
-
-        avgMaxWaitTime = np.mean([s.maxWaitTime for s in iterationStats])
-        avgAvgWaitTime = np.mean([s.avgWaitTime for s in iterationStats])
         
         avgCustomerArrived = np.mean([s.customerArrived for s in iterationStats])
         avgCustomerServed = np.mean([s.customerServed for s in iterationStats])
 
         maxMaxQueueLength=np.max([s.maxQueueLength for s in iterationStats]),
+
+        avgRenegeRate = np.mean([s.renegeRate for s in iterationStats])
 
         summary = dict(
             avgQualityOfService=avgQualityOfService,
@@ -489,11 +518,10 @@ class CallCenterCase(DiscreteEventCase):
             avgAvgTimeInQueue=avgAvgTimeInQueue,
             avgMaxServiceTime=avgMaxServiceTime,
             avgAvgServiceTime=avgAvgServiceTime,
-            avgMaxWaitTime=avgMaxWaitTime,
-            avgAvgWaitTime=avgAvgWaitTime,
             avgCustomerArrived=avgCustomerArrived,
             avgCustomerServed=avgCustomerServed,
             maxMaxQueueLength=maxMaxQueueLength,
+            avgRenegeRate=avgRenegeRate,
             avgAvgQueueLengthOverTime=np.mean([s.avgQueueLengthOverTime for s in iterationStats])
         )
 
@@ -502,11 +530,15 @@ class CallCenterCase(DiscreteEventCase):
         return CallCenterResult(score, summary, iterationStats)
 
 
-class AgentOnSchedule(BaseDESEvent):
-    def __init__(self, time: float, agent:Agent, system: CallCenterCase) -> None:
+class CallCenterEvent(BaseDESEvent):
+    def __init__(self, time: float, system:CallCenterCase) -> None:
         super().__init__(time)
+        self.system: CallCenterCase = system
+
+class AgentOnSchedule(CallCenterEvent):
+    def __init__(self, time: float, system: CallCenterCase, agent:Agent) -> None:
+        super().__init__(time, system)
         self.__agent: Agent = agent
-        self.__system: CallCenterCase = system
 
     def execute(self):
         agent = self.__agent
@@ -517,88 +549,119 @@ class AgentOnSchedule(BaseDESEvent):
         if agent.isBusy:    # this means the agent is currently serving a customer.
             return
         
-        serviceQueue = self.__system.customerQueue
+        serviceQueue = self.system.customerQueue
         if not serviceQueue.empty():
-            event = ServiceStart(self.time, agent, self.__system)
-            self.__system.addEvent(event)
+            event = ServiceStart(self.time, self.system, agent)
+            self.system.addEvent(event)
 
 
-class ServiceStart(BaseDESEvent):
+class ServiceStart(CallCenterEvent):
 
-    def __init__(self, time: float, agent: Agent, system:CallCenterCase) -> None:
-        super().__init__(time)
+    def __init__(self, time: float, system:CallCenterCase, agent: Agent) -> None:
+        super().__init__(time, system)
         self.__agent: Agent = agent
-        self.__system: CallCenterCase = system
 
     def execute(self):
-        # customer logic
-        queue = self.__system.customerQueue
-        if queue.empty():
-            return
-        customer:Customer = self.__system.customerQueue.dequeue()
-        customer.serviceStartTime = self.time
-        serviceTime = self.__system.generateServiceTime()
-        serviceEndTime = self.time + serviceTime    
-        customer.exitTime = serviceEndTime
-        customer.serviceTime = serviceTime
+        # handles callback tasks first, then customer tasks
 
-        # agent logic
-        self.__agent.isBusy = True
-        self.__agent.totalServiceTime += serviceTime
-        serviceEndEvent = ServiceEnd(serviceEndTime, self.__agent, self.__system)
-        self.__system.addEvent(serviceEndEvent)
+        callbackQueue = self.system.callbackQueue
+        if not callbackQueue.empty():
+            customer: Customer = callbackQueue.dequeue()
+            callbackTime = self.system.generateServiceTime()
+            callbackEndTime = self.time + callbackTime
+
+            # agent logic
+            self.__agent.isBusy = True
+            self.__agent.totalServiceTime += callbackTime
+            serviceEndEvent = ServiceEnd(callbackEndTime, self.system, self.__agent, customer, ServiceEnd.CALLBACK)
+            self.system.addEvent(serviceEndEvent)
+        else:
+            customerQueue = self.system.customerQueue
+            if customerQueue.empty():
+                return
+            customer:Customer = self.system.customerQueue.dequeue()
+            customer.dequeueTime = self.time
+            customer.serviceStartTime = self.time
+            serviceTime = self.system.generateServiceTime()
+            serviceEndTime = self.time + serviceTime    
+            customer.serviceTime = serviceTime
+
+            # agent logic
+            self.__agent.isBusy = True
+            self.__agent.totalServiceTime += serviceTime
+            serviceEndEvent = ServiceEnd(serviceEndTime, self.system, self.__agent, customer, ServiceEnd.CUSTOMER)
+            self.system.addEvent(serviceEndEvent)
         
 
+class ServiceEnd(CallCenterEvent):
+    CUSTOMER = 0
+    CALLBACK = 1
 
-class ServiceEnd(BaseDESEvent):
-    def __init__(self, time: float, agent: Agent, system: CallCenterCase) -> None:
-        super().__init__(time)
+    def __init__(self, time: float, system: CallCenterCase, agent: Agent, customer:Customer, taskType:int) -> None:
+        super().__init__(time, system)
         self.__agent: Agent = agent
-        self.__system: CallCenterCase = system
+        self.__customer: Customer = customer
+        self.__taskType = taskType
 
     def execute(self):
+        customer = self.__customer
+
+        # task logic
+        if self.__taskType == self.CUSTOMER:
+            customer.exitTime = self.time
+            doCallback = np.random.random() < self.system.callbackRate()
+            if doCallback:
+                self.system.callbackQueue.enqueue(customer.offerType, customer)
+
+        # agent logic
         self.__agent.isBusy = False
-        if self.time < self.__system.endTime and self.__agent.isOnSchedule(self.time):
-            serviceStartEvent = ServiceStart(self.time, self.__agent, self.__system)
-            self.__system.addEvent(serviceStartEvent)
+        if self.time < self.system.endTime and self.__agent.isOnSchedule(self.time):
+            serviceStartEvent = ServiceStart(self.time, self.system, self.__agent)
+            self.system.addEvent(serviceStartEvent)
 
 
-class TryRenege(BaseDESEvent):
-    def __init__(self, time: float) -> None:
-        super().__init__(time)
-        raise NotImplementedError()
-    
+class TryRenege(CallCenterEvent):
+    def __init__(self, time: float, system: CallCenterCase, customer: Customer) -> None:
+        super().__init__(time, system)
+        self.__customer: Customer = customer
 
-class Callback(BaseDESEvent):
-    def __init__(self, time: float) -> None:
-        super().__init__(time)
-        raise NotImplementedError()
-    
+    def execute(self):
+        customer = self.__customer
+        queue = self.system.customerQueue
+        if queue.tryDequeueItem(customer):
+            customer.dequeueTime = self.time
+            customer.exitTime = self.time
+            customer.renege = True
 
-class CallArrive(BaseDESEvent):
+
+class CallArrive(CallCenterEvent):
 
     def __init__(self, time: float, system: CallCenterCase) -> None:
-        super().__init__(time)
-        self.__system: CallCenterCase = system
+        super().__init__(time, system)
     
     def execute(self):
 
         # next arrival logic
         deltaTime = CallCenterCase.generateInterArrivalTime(self.time)
-        nextArrTime = self.__system.systemTime + deltaTime
-        if nextArrTime < self.__system.endTime:
-            nextArrEvent = CallArrive(nextArrTime, self.__system)
-            self.__system.addEvent(nextArrEvent)
+        nextArrTime = self.system.systemTime + deltaTime
+        if nextArrTime < self.system.endTime:
+            nextArrEvent = CallArrive(nextArrTime, self.system)
+            self.system.addEvent(nextArrEvent)
 
         # current customer logic
         customer = Customer(self.time)  # create new customer who arrives at the current time
-        self.__system.addCustomer(customer)
+        self.system.addCustomer(customer)
         offerType = customer.offerType
-        self.__system.customerQueue.enqueue(offerType, customer)
+        self.system.customerQueue.enqueue(offerType, customer)
         customer.enqueueTime = self.time  # in this case the incoming call is immediately enqueued
+
+        # try renege logic
+        timeThreshold = 60
+        renege = TryRenege(self.time + timeThreshold, self.system, customer)
+        self.system.addEvent(renege)
         
-        agent = self.__system.getIdelAgent()
+        agent = self.system.getIdelAgent()
         if agent:
             # start service
-            serviceEvent = ServiceStart(self.time, agent, self.__system)
-            self.__system.addEvent(serviceEvent)
+            serviceEvent = ServiceStart(self.time, self.system, agent)
+            self.system.addEvent(serviceEvent)
