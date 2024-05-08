@@ -38,6 +38,7 @@ urlpatterns = [
     path('api/manage/groups/create', ManageApi.create_groups,),
     path('api/manage/groups/paginated', ManageApi.group_view_paginated,),
     path('api/manage/groups/delete', ManageApi.delete_group,),
+    path('api/manage/groups/freeze', ManageApi.freezeGroup,),
 
     path('api/manage/case-submissions/limit', ManageApi.case_submission_limit,),
     path('api/manage/case-submissions', ManageApi.case_submissions,),

@@ -5,7 +5,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Max
 from django.conf import settings
 
-from .simulation import FoodDelivery, SimulationException
+from .simulation import FoodDelivery, SimulationException, CallCenter
 from .bmgtModels import *
 from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
 
@@ -210,12 +210,12 @@ class GroupApi:
             if user.group == None:
                 group = BMGTGroup.objects.get(id=group_id)
                 if user.role == BMGTUser.BMGTUserRole.USER and user.semester_id != group.semester_id:
-                    resp.reject("You cannot join a group in another semester!")
+                    resp.reject("You cannot join a group of another semester!")
                 else:
                     if group.users.count() >= _MAX_GROUP_SIZE:
                         resp.reject("Group already full!")
                     elif group.is_frozen:
-                        resp.reject("Cannot join the group at this time!")
+                        resp.reject("Group is frozen! Please contact the admin regarding the issue.")
                     else:
                         user.group = group
                         user.save()
@@ -254,6 +254,9 @@ class GroupApi:
 class CaseApi:
     @staticmethod
     def __case_submittable(case:BMGTCase, group:BMGTGroup) -> bool:
+        """
+        check if the group is allowed to submit the case
+        """
         count_submission = BMGTCaseRecord.objects.filter(
                 case=case, group=group,
                 state__in=[BMGTCaseRecord.State.RUNNING, BMGTCaseRecord.State.SUCCESS]
@@ -306,8 +309,16 @@ class CaseApi:
                             config = json.loads(configQuery.get().config_json)
                             params['config'] = config
                         simulation_instance = FoodDelivery(**params)
+                    elif case_id == 2:   # call center
+                        params = data['case_params']
+                        configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
+                        if configQuery.exists():
+                            config = json.loads(configQuery.get().config_json)
+                            params['config'] = config
+                        simulation_instance = CallCenter.CallCenterCase(**params)  # should  be a matrix
                     else:
                         resp.reject("Case not found!")
+                        return resp
 
                     # create case record first. simulation eligibility is calculated based on valid case records
                     with transaction.atomic():
@@ -319,14 +330,13 @@ class CaseApi:
                         case_record.save()
 
                     # run simulation
-                    res = simulation_instance.run()
+                    res = simulation_instance.run(10)
                     caseRecordStream = res.asFileStream()
                     caseSummary = res.asDict()
                     case_record.summary_dict = caseSummary
                     with open(_CASE_RECORD_PATH + case_record.file_name, "wb") as file:
                         file.write(caseRecordStream.getvalue())
                     case_record.state = BMGTCaseRecord.State.SUCCESS
-                    case_record.score = res.score
                     case_record.performance_metric = res.performance_metric
                     case_record.save()
                     resp.resolve({
@@ -359,12 +369,12 @@ class CaseApi:
             if case_record:
                 case_record.state = BMGTCaseRecord.State.FAILED
                 case_record.save()
-        except Exception:
+        except Exception as e:
             if case_record:
                 case_record.state = BMGTCaseRecord.State.FAILED
                 case_record.save()
             
-            raise
+            resp.reject(e.args[0] if e.args else "An error has occured!")
             
         return resp
 
@@ -404,12 +414,15 @@ class CaseRecordApi:
     def case_records_paginated(request: HttpRequest) -> HttpResponse:
         resp = AppResponse()
         user: BMGTUser = _get_session_user(request)
-        if not user.group:
-            resp.reject("You must join a group to view case records!")
-        else:
-            pagerParams = pager_params_from_request(request)
-            data = generic_paginated_query(BMGTCaseRecord, pagerParams, state=BMGTCaseRecord.State.SUCCESS, group_id=user.group.id)
-            _resolvePaginatedData(data, resp=resp)
+        # if not user.group:
+        #     resp.reject("You must join a group to view case records!")
+        # else:
+        #     pagerParams = pager_params_from_request(request)
+        #     data = generic_paginated_query(BMGTCaseRecord, pagerParams, state=BMGTCaseRecord.State.SUCCESS, group_id=user.group.id)
+        #     _resolvePaginatedData(data, resp=resp)
+        pager_params = pager_params_from_request(request)
+        data = generic_paginated_query(BMGTCaseRecord, pager_params, state=BMGTCaseRecord.State.SUCCESS, user_id=user.id)
+        _resolvePaginatedData(data, resp=resp)
         return resp
 
     @request_error_handler
@@ -419,7 +432,7 @@ class CaseRecordApi:
             resp = AppResponse()
             case_id = int(request.GET.get('case_id'))
             user = _get_session_user(request)
-            if case_id == 1:
+            if case_id == 1 or case_id == 2:
                 page = int(request.GET.get('page', None))
                 size = int(request.GET.get('size', None))
                 query_params = create_pager_params(page, size, ['-performance_metric', '-score'])
@@ -705,8 +718,14 @@ class ManageApi:
             resp = AppResponse()
             data = json.loads(request.body)
             arr_semester_id = data['arr_semester_id']
-            semester = BMGTSemester.objects.filter(id__in=arr_semester_id)
-            semester.delete()
+
+            BMGTGroup.objects.filter(semester_id__in=arr_semester_id).delete()
+            BMGTUser.objects.filter(semester_id__in=arr_semester_id).delete()
+            BMGTCaseRecord.objects.filter(user__semester_id__in=arr_semester_id).delete()
+            # also delete dangling records
+            BMGTCaseRecord.objects.filter(group__isnull=True).delete()
+            BMGTSemester.objects.filter(id__in=arr_semester_id).delete()
+            
             resp.resolve("Semester deleted!")
         except BMGTSemester.DoesNotExist:
             resp.reject("Semester not found!")
@@ -779,15 +798,27 @@ class ManageApi:
             resp.reject("Invalid data format!")
         return resp
     
+    @request_error_handler
+    @require_POST
+    @staticmethod   
+    def freezeGroup(request: HttpRequest) -> HttpResponse:
+        resp = AppResponse()
+        data = json.loads(request.body)
+        semester_id = data['semester_id']
+        is_frozen = int(data['is_frozen']) == 1
+        BMGTGroup.objects.filter(semester_id=semester_id).update(is_frozen=is_frozen)
+        resp.resolve("Group frozen status updated!")
+        
+    
 
 def apiStartUp():
     # handle previous case records that do not have performance metric
-    records = BMGTCaseRecord.objects.filter(performance_metric__isnull=True, state = BMGTCaseRecord.State.SUCCESS)
-    if records.exists():
-        for r in records:
-            summary = json.loads(r.summary_dict.replace("\'", "\""))
-            r.performance_metric = summary['perf_metric']
-            r.save()
+    # records = BMGTCaseRecord.objects.filter(performance_metric__isnull=True, state = BMGTCaseRecord.State.SUCCESS)
+    # if records.exists():
+    #     for r in records:
+    #         summary = json.loads(r.summary_dict.replace("\'", "\""))
+    #         r.performance_metric = summary['perf_metric']
+    #         r.save()
 
     # create default case objects if not exist
     try:
@@ -803,4 +834,4 @@ def apiStartUp():
         callCenter.save()         
 
 
-apiStartUp()
+#apiStartUp()

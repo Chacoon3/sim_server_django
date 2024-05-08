@@ -10,15 +10,10 @@ from typing import Union
 
 class FoodDeliveryResult(SimulationResult):
 
-    def __init__(self, centers, policies, score: float, perfMetric: float, summaryData, iterationData) -> None:
-        super().__init__(score, summaryData, iterationData)
+    def __init__(self, centers, policies, perfMetric: float, summaryData, iterationData) -> None:
+        super().__init__(perfMetric, summaryData, iterationData)
         self.__centers = centers
         self.__policies = policies
-        self.__perfMetric = perfMetric
-
-    @property
-    def performance_metric(self) -> float:
-        return self.__perfMetric
 
     def asFileStream(self) -> io.BytesIO:
         wb = openpyxl.Workbook(write_only=True)
@@ -356,7 +351,7 @@ class FoodDelivery(SimulationCase):
         )
         return output
 
-    def run(self):
+    def run(self, iterations: int = 1) -> FoodDeliveryResult:
         original_centers = copy.deepcopy(self.__centers)
         if self.__config is not None:   # remap centers
             self.__centers = [self.__config[c] for c in self.__centers]
@@ -381,5 +376,5 @@ class FoodDelivery(SimulationCase):
                 {v: k for k, v in self.__config.items()}
             )
 
-        simRes = FoodDeliveryResult(original_centers, self.__policies, score, performance_metric, df_aggregated_statistics, df_per_center_statistics)
+        simRes = FoodDeliveryResult(original_centers, self.__policies, performance_metric, df_aggregated_statistics, df_per_center_statistics)
         return simRes

@@ -136,18 +136,18 @@ class SimulationResult(object):
     abstraction of simulation result"
     """
 
-    def __init__(self, score: float, summaryData, iterationData) -> None:
+    def __init__(self, perfMetric: float, summaryData, iterationData) -> None:
         """
         score is the single metric used to evaluate a simulation strategy
         per_iteration_data is a list of data collected in each iteration
         """
-        self.__score = score
+        self.__perfMetric = perfMetric
         self.__summary = summaryData
         self.__iterationData = iterationData
 
     @property
-    def score(self):
-        return self.__score
+    def performance_metric(self) -> float:
+        return self.__perfMetric
 
     @property
     def summaryData(self) -> object:

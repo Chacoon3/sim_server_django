@@ -1,5 +1,6 @@
 import io
 import numpy as np
+import openpyxl
 import pandas as pd
 from .Core import SimulationException, SimulationResult, DiscreteEventCase, BaseDESEvent, SimulationHelper, ResourceQueue
 from typing import Union
@@ -150,7 +151,7 @@ class Agent:
     __id = -1
 
     @staticmethod
-    def __validateSchedule(schedule:list[list[float]]):
+    def __validateSchedule(schedule:list[list[int]]):
             prev = None
             for s in schedule:
                 if len(s) != 2:
@@ -163,7 +164,7 @@ class Agent:
                     raise SimulationException("Invalid schedule. Start time cannot be less than the previous end time!")
                 prev = s[1]
 
-    def __init__(self, schedule:list[list[float]], level:int) -> None:
+    def __init__(self, schedule:list[list[int]], level:int) -> None:
         Agent.__validateSchedule(schedule)
         Agent.__id += 1
         self.__id = Agent.__id
@@ -181,7 +182,7 @@ class Agent:
         return self.__level
     
     @property
-    def schedule(self) -> list[list[float]]:
+    def schedule(self) -> list[list[int]]:
         return self.__schedule
     
     @property
@@ -229,14 +230,37 @@ class Agent:
     
 class CallCenterResult(SimulationResult):
     
-    def __init__(self, score: float, aggregated_data: pd.DataFrame = None, iteration_data: list = None) -> None:
-        super().__init__(score, aggregated_data, iteration_data)
+    def __init__(self, schedules:list[list[int]], score: float, summaryData: dict, iterationData: list = None) -> None:
+        super().__init__(score, summaryData, iterationData)
+        self.schedules = schedules
 
     def asFileStream(self) -> io.BytesIO:
-        raise NotImplementedError()
+        wb = openpyxl.Workbook(write_only=True)
+        main_sheet = wb.create_sheet('main')
+        # write decision variables
+        main_sheet.append(['Decision Variables'])
+        header = ['agent'] + [f'{8 + i // 2}: {i % 2 * 30}' for i in range(18)]
+        main_sheet.append(header)
+        for row in self.schedules:
+            main_sheet.append(row)
+
+        # write summary data
+        for k in self.summaryData:
+            v = self.summaryData[k]
+            main_sheet.append([k, v])
+        
+        # detail_sheet = wb.create_sheet('detail')
+        # detail_sheet.append(self.iterationData.columns.tolist())
+        # for row in self.iterationData.values.tolist():
+        #     detail_sheet.append(row)
+    
+        bytes_io = io.BytesIO()
+        wb.save(filename=bytes_io)
+        bytes_io.seek(0)
+        return bytes_io
     
     def asDict(self) -> dict:
-        raise NotImplementedError()
+        return self.summaryData
     
 
 class CallCenterCase(DiscreteEventCase):
@@ -266,9 +290,7 @@ class CallCenterCase(DiscreteEventCase):
 
     # schedule is represented as a nested list. Each inner list represents a time interval.
     # an agent may work during multiple time intervals in a day
-    __schedule1 = [[0 * 3600, 4 * 3600]]  # 8am to 12pm
-    __schedule2 = [[3 * 3600, 7 * 3600]]  # 11am to 3pm
-    __schedule3 = [[5 * 3600, 9 * 3600]]  # 1pm to 5pmwe
+
     __arrivalRateWeightBySlot = [
         0.0391, 0.0901, 0.0781, 0.0641, 0.0981, 0.0811, 0.024, 0.03, 0.0451, 0.019, 0.03, 0.0701, 0.0751, 0.0776, 0.0861,
         0.032, 0.026, 0.0381
@@ -291,6 +313,23 @@ class CallCenterCase(DiscreteEventCase):
                 raise SimulationException("Invalid decision. Decision cannot be negative!")
             if numberOfAgents > 20:
                 raise SimulationException("Invalid decision. Decision cannot be greater than 5!")
+
+    @staticmethod
+    def __validateMatrixInput(decision:list[list[int]]):
+        if len(decision) != CallCenterCase.__lv1AgentsCount:
+            raise SimulationException("Invalid decision. Decision must have 15 elements!")
+        atLeastOneAgent = False
+        for row in decision:
+            for item in row:
+                if item != 0 and item != 1:
+                    raise SimulationException("Invalid decision. Decision matrix must be a zero-one matrix!")
+                timeUnits = sum(row)
+                if timeUnits > 16:
+                    raise SimulationException("Invalid decision. An agent cannot work for more than 8 hours!")
+                if timeUnits > 0:
+                    atLeastOneAgent = True
+        if not atLeastOneAgent:
+            raise SimulationException("Invalid decision. At least one agent must be working!")
             
     @staticmethod
     def __validateArrivalRate():
@@ -327,7 +366,7 @@ class CallCenterCase(DiscreteEventCase):
             
 
     @staticmethod
-    def convertToSchedule(decision:list[int]) -> __TypeDecomposition:
+    def __convertToSchedule(decision:list[int]) -> __TypeDecomposition:
         """
         converts decision, which is a list of integers representing the number of agents at each timeslot into a list of tuples. \n
         Each tuple contains a list of intervals and the number of agents working during those intervals.
@@ -354,22 +393,58 @@ class CallCenterCase(DiscreteEventCase):
         CallCenterCase.__validateDecomposition(decision, res)
         return res
 
-    
-    def __init__(self, decision:list[int]) -> None:
+
+    @staticmethod
+    def __getSchedule(agentAvailability:list[int]) ->list[list[int]]:
         """
-        decision: list of integers, representing the number of lv 1agents at each time slot
+        concerts a vector indicating an agent's availability during each time slot into a list of intervals where every interval represents the time the agent is available.
+        """
+        cursor = 0
+        res = []
+        while cursor < len(agentAvailability):
+            val = agentAvailability[cursor]
+            if val == 1:
+                schedule = [cursor * CallCenterCase.__timeSlotLengthInSec]
+                nextCursor= cursor+1
+                while nextCursor < len(agentAvailability) and agentAvailability[nextCursor] == 1:
+                    nextCursor += 1
+                schedule.append(nextCursor * CallCenterCase.__timeSlotLengthInSec)
+                res.append(schedule)
+                cursor = nextCursor
+            else:
+                cursor += 1
+        return res
+
+
+    @staticmethod
+    def __convertMatrixToSchedule(decision:list[list[int]]) -> list[list[list[int]]]:
+        """
+        convert the matrix input into a list of agent schedules
+        """
+
+        schedules = []
+        for row in decision:
+            if len(row) != 18:
+                raise SimulationException("Invalid decision. Row vector of decision matrix must have 18 elements!")
+            schedule = CallCenterCase.__getSchedule(row)
+            schedules.append(schedule)
+        return schedules
+    
+    
+    def __init__(self, schedules:list[list[int]]) -> None:  # param names fixed
+        """
+        decision: matrix of integers representing each agent's schedule
         """
         super().__init__()
-        self.__validateInput(decision)
-        self.__decision = decision
-        self.__schedules = self.convertToSchedule(self.__decision)
+        self.__validateMatrixInput(schedules)
+        self.__rawSchedule = schedules
+        self.__schedules = self.__convertMatrixToSchedule(schedules)
         self.__validateArrivalRate()
         self.__endTime = 3600 * 9  # 9 hours
         self.__customers = list[Customer]() # records all customers
         self.__customerQueue = ResourceQueue(self)  # priority queues for customers
         self.__callbackQueue  = ResourceQueue(self)  # priority queues for callback tasks
         self.__agents = [list[Agent]() for _ in range(3)]  # empty lists for lv1, lv2, lv3 agents
-  
 
     def shouldStop(self) -> bool:
         return self._eventQueue.empty() or self.systemTime >= self.__endTime
@@ -428,7 +503,7 @@ class CallCenterCase(DiscreteEventCase):
         """
         totalServiceTime = sum([a.totalServiceTime for a in self.__agents[0]])
         totalScheduleTime = sum([a.totalScheduleTime for a in self.__agents[0]])
-        return round(totalServiceTime / totalScheduleTime * 100, 4)
+        return round(totalServiceTime / totalScheduleTime, 6)
     
 
     def reset(self):
@@ -440,8 +515,8 @@ class CallCenterCase(DiscreteEventCase):
         for agents in self.__agents:
             agents.clear()
 
-        for schedule, num in self.__schedules:
-            for _ in range(num):
+        for schedule in self.__schedules:
+            if len(schedule) > 0:
                 agent = Agent(schedule, 1)
                 self.__agents[0].append(agent)      
 
@@ -457,7 +532,6 @@ class CallCenterCase(DiscreteEventCase):
                     if t > 0:
                         agentOnSchedule = AgentOnSchedule(t, self, agent)
                         self.addEvent(agentOnSchedule)
-
 
     def simulate(self) -> IterationStats:
         self.reset() 
@@ -507,12 +581,12 @@ class CallCenterCase(DiscreteEventCase):
         avgCustomerArrived = np.mean([s.customerArrived for s in iterationStats])
         avgCustomerServed = np.mean([s.customerServed for s in iterationStats])
 
-        maxMaxQueueLength=np.max([s.maxQueueLength for s in iterationStats]),
+        maxMaxQueueLength=int(np.max([s.maxQueueLength for s in iterationStats])),
 
-        avgRenegeRate = np.mean([s.renegeRate for s in iterationStats])
+        avgRenegeRate = np.mean([s.renegeRate for s in iterationStats], dtype=float)
 
         summary = dict(
-            avgQualityOfService=avgQualityOfService,
+            perf_metric=avgQualityOfService,
             avgAgentUtilizationRate=avgAgentUtilizationRate,
             avgMaxTimeInQueue=avgMaxTimeInQueue,
             avgAvgTimeInQueue=avgAvgTimeInQueue,
@@ -520,20 +594,21 @@ class CallCenterCase(DiscreteEventCase):
             avgAvgServiceTime=avgAvgServiceTime,
             avgCustomerArrived=avgCustomerArrived,
             avgCustomerServed=avgCustomerServed,
-            maxMaxQueueLength=maxMaxQueueLength,
+            maxMaxQueueLength=maxMaxQueueLength[0],
             avgRenegeRate=avgRenegeRate,
             avgAvgQueueLengthOverTime=np.mean([s.avgQueueLengthOverTime for s in iterationStats])
         )
 
         score = avgQualityOfService * 0.5 + avgAgentUtilizationRate * 0.5
 
-        return CallCenterResult(score, summary, iterationStats)
+        return CallCenterResult(self.__rawSchedule, score, summary, iterationStats)
 
 
 class CallCenterEvent(BaseDESEvent):
     def __init__(self, time: float, system:CallCenterCase) -> None:
         super().__init__(time)
         self.system: CallCenterCase = system
+
 
 class AgentOnSchedule(CallCenterEvent):
     def __init__(self, time: float, system: CallCenterCase, agent:Agent) -> None:
