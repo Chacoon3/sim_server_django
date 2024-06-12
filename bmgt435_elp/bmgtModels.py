@@ -200,6 +200,8 @@ class BMGTCaseRecord(BMGTModelBase):
         BMGTGroup, on_delete=models.SET_NULL, null=True,)
     user = models.ForeignKey(
         BMGTUser, on_delete=models.SET_NULL, null=True,)
+    # semester = models.ForeignKey(
+    #     BMGTSemester, on_delete=models.SET_NULL, null=True,)
     case = models.ForeignKey(
         BMGTCase, on_delete=models.CASCADE, null=True,)
     score = models.FloatField(null=True, default=None)

@@ -7,7 +7,8 @@ from django.http import HttpRequest, HttpResponse
 from http import HTTPStatus
 from .jsonUtils import CustomJSONEncoder
 from ..simulation.Core import SimulationException
-from ..bmgtModels import BMGTTransaction, BMGTModelBase
+from ..bmgtModels import BMGTTransaction, BMGTModelBase, BMGTCaseRecord
+from django.db.models import Max, OuterRef, Subquery
 
 import regex as re
 import json
@@ -73,6 +74,13 @@ def request_error_handler(func):
                 resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
                 resp.write("Internal server error!")
         
+        except object as e:
+            if settings.DEBUG:
+                raise
+            else:
+                resp = HttpResponse()
+                resp.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
+                resp.write("Internal server error!")
         return resp
 
     return wrapped
@@ -121,6 +129,27 @@ def pager_params_from_request(request: HttpRequest) -> dict:
         'size': size,
         'order': order
     }
+
+
+def leaderboard_query(caseId:int, pager_params, semesterId = None) -> dict:
+    candidateRows = BMGTCaseRecord.objects.filter(case_id=caseId, state=BMGTCaseRecord.State.SUCCESS)
+        
+    perGroupMetric = candidateRows.filter(group=OuterRef('group'))
+    groupMaxScore = candidateRows.filter(performance_metric = Subquery(perGroupMetric.annotate(maxMetric=Max('performance_metric')).values('maxMetric')[:1]))
+    if semesterId is not None:
+        groupMaxScore = groupMaxScore.filter(group__semester_id=semesterId)
+    pager = Paginator(groupMaxScore.order_by("-performance_metric"), pager_params['size'])
+    page = pager_params['page']
+
+    if page > pager.num_pages or page < 1:
+        raise ValueError("Invalid page number")
+    else:
+        pageData = {
+            'page': page,
+            'totalPage': pager.num_pages,
+            'data': [model.as_dictionary() for model in pager.page(page)]
+        }
+        return pageData
 
 
 def generic_paginated_query(dbModel: Model, pager_params, **kwargs) -> dict:

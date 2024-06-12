@@ -47,10 +47,22 @@ class Customer:
         self.__dequeueTime:float = None
         self.__serviceStartTime:float = None
         self.__renege = False
+        self.__bulk = False
 
     @property
     def id(self) -> int:
         return self.__id
+    
+    @property
+    def bulk(self) -> bool:
+        return self.__bulk
+    
+    @bulk.setter
+    def bulk(self, value:bool):
+        if value:
+            self.__bulk = value
+        else:
+            raise SimulationException("Invalid bulk value. Bulk value cannot be False!")
     
     @property
     def renege(self) -> bool:
@@ -242,7 +254,7 @@ class CallCenterResult(SimulationResult):
         header = ['agent'] + [f'{8 + i // 2}: {i % 2 * 30}' for i in range(18)]
         main_sheet.append(header)
         for row in self.schedules:
-            main_sheet.append(row)
+            main_sheet.append([' '] +  row)
 
         # write summary data
         for k in self.summaryData:
@@ -283,6 +295,7 @@ class CallCenterCase(DiscreteEventCase):
             self.customerServed: int = None
 
             self.renegeRate: float = None
+            self.bulkRate: float = None
 
             self.avgQueueLengthOverTime: float = None
             self.maxQueueLength: int = None
@@ -559,7 +572,10 @@ class CallCenterCase(DiscreteEventCase):
         stats.maxQueueLength = np.max(self.__customerQueue.maxQueueLength)
         stats.avgQueueLengthOverTime = self.__customerQueue.avgQueueLengthOverTime(0, self.endTime)
 
-        stats.renegeRate = len([c for c in self.__customers if c.renege]) / len(self.__customers)
+        # stats.renegeRate = len([c for c in self.__customers if c.renege]) / len(self.__customers)
+        stats.renegeRate = np.mean([c.renege for c in self.__customers], dtype=float)
+        # stats.bulkRate = len([c for c in self.__customers if c.bulk]) / len(self.__customers)
+        stats.bulkRate = np.mean([c.bulk for c in self.__customers], dtype=float)
 
         return stats
   
@@ -584,6 +600,7 @@ class CallCenterCase(DiscreteEventCase):
         maxMaxQueueLength=int(np.max([s.maxQueueLength for s in iterationStats])),
 
         avgRenegeRate = np.mean([s.renegeRate for s in iterationStats], dtype=float)
+        avgBulkRate = np.mean([s.bulkRate for s in iterationStats], dtype=float)
 
         summary = dict(
             perf_metric=avgQualityOfService,
@@ -596,6 +613,7 @@ class CallCenterCase(DiscreteEventCase):
             avgCustomerServed=avgCustomerServed,
             maxMaxQueueLength=maxMaxQueueLength[0],
             avgRenegeRate=avgRenegeRate,
+            avgBulkRate=avgBulkRate,
             avgAvgQueueLengthOverTime=np.mean([s.avgQueueLengthOverTime for s in iterationStats])
         )
 
@@ -695,6 +713,25 @@ class ServiceEnd(CallCenterEvent):
             self.system.addEvent(serviceStartEvent)
 
 
+class TryBulk(CallCenterEvent):
+
+    def __init__(self, time: float, system: CallCenterCase, customer:Customer, lineTolerance:int) -> None:
+        super().__init__(time, system)
+        self.__customer: Customer = customer
+        self.__lineTolerance = lineTolerance
+    
+
+    def execute(self):
+        qLen = len(self.system.customerQueue)
+        if qLen > self.__lineTolerance:
+            if self.system.customerQueue.tryDequeueItem(self.__customer):
+                self.__customer.dequeueTime = self.time
+                self.__customer.exitTime = self.time
+                self.__customer.bulk = True
+            else:
+                raise SimulationException("Logic error. Failed to dequeue a bulking customer!")
+
+
 class TryRenege(CallCenterEvent):
     def __init__(self, time: float, system: CallCenterCase, customer: Customer) -> None:
         super().__init__(time, system)
@@ -730,9 +767,14 @@ class CallArrive(CallCenterEvent):
         self.system.customerQueue.enqueue(offerType, customer)
         customer.enqueueTime = self.time  # in this case the incoming call is immediately enqueued
 
+        # try bulk logic
+        lineTolerance = np.random.triangular(5, 10, 20) 
+        bulkEvent = TryBulk(self.time, self.system, customer, lineTolerance)
+        self.system.addEvent(bulkEvent)
+
         # try renege logic
-        timeThreshold = 60
-        renege = TryRenege(self.time + timeThreshold, self.system, customer)
+        timeTolerance = np.random.uniform(120, 300)
+        renege = TryRenege(self.time + timeTolerance, self.system, customer)
         self.system.addEvent(renege)
         
         agent = self.system.getIdelAgent()

@@ -23,6 +23,7 @@ class FoodDeliveryResult(SimulationResult):
         for center, policy in zip(self.__centers, self.__policies):
             main_sheet.append([center, policy[0], policy[1]])
 
+        main_sheet.append(["Summary Data"])
         main_sheet.append(self.summaryData.columns.tolist())
         for row in self.summaryData.values.tolist():
             main_sheet.append(row)
@@ -228,7 +229,7 @@ class FoodDelivery(SimulationCase):
             'perf_metric': float('-inf'),
             'total_revenue': 0,
             'total_shortage_count': 0,
-            'total_shortage_amount': 0,
+            'total_shortage_cost': 0,
             'total_holding_cost': 0,
             'total_fixed_cost': 0,
             'history': history
@@ -336,7 +337,7 @@ class FoodDelivery(SimulationCase):
         output['total_shortage_count'] = round(sum([
             sum(history[c.get_name()]['shortage_count']) for c in centers
         ]), 2)
-        output['total_shortage_amount'] = round(sum([
+        output['total_shortage_cost'] = round(sum([
             sum(history[c.get_name()]['shortage_amount']) for c in centers
         ]), 2)
         output['total_holding_cost'] = sum([
@@ -345,7 +346,7 @@ class FoodDelivery(SimulationCase):
         output['total_fixed_cost'] = len(
             centers) * self.__num_weeks * FoodDelivery.__center_weekly_cost
         output['perf_metric'] = round(
-            output['total_revenue'] - output['total_shortage_amount'] - \
+            output['total_revenue'] - output['total_shortage_cost'] - \
             output['total_fixed_cost'] - output['total_holding_cost'],
             2
         )

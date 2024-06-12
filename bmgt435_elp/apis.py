@@ -7,7 +7,7 @@ from django.conf import settings
 
 from .simulation import FoodDelivery, SimulationException, CallCenter
 from .bmgtModels import *
-from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse
+from .utils.apiUtils import request_error_handler, password_valid, generic_paginated_query, pager_params_from_request, create_pager_params, AppResponse, leaderboard_query
 
 import pandas as pd
 import json
@@ -337,7 +337,7 @@ class CaseApi:
                     with open(_CASE_RECORD_PATH + case_record.file_name, "wb") as file:
                         file.write(caseRecordStream.getvalue())
                     case_record.state = BMGTCaseRecord.State.SUCCESS
-                    case_record.performance_metric = res.performance_metric
+                    case_record.performance_metric = round(res.performance_metric, 10)
                     case_record.save()
                     resp.resolve({
                         "case_record_id": case_record.id,
@@ -425,6 +425,7 @@ class CaseRecordApi:
         _resolvePaginatedData(data, resp=resp)
         return resp
 
+
     @request_error_handler
     @require_GET
     def leader_board_paginated(request: HttpRequest) -> HttpResponse:
@@ -435,13 +436,24 @@ class CaseRecordApi:
             if case_id == 1 or case_id == 2:
                 page = int(request.GET.get('page', None))
                 size = int(request.GET.get('size', None))
-                query_params = create_pager_params(page, size, ['-performance_metric', '-score'])
-                data = generic_paginated_query(
-                    BMGTCaseRecord, query_params,
-                    user__semester=user.semester,
-                    state=BMGTCaseRecord.State.SUCCESS,
-                    case_id=case_id,
-                    )
+                query_params = create_pager_params(page, size, ['-performance_metric'])
+                # if user.semester != None and user.semester.id != None:
+                #     data = generic_paginated_query(
+                #         BMGTCaseRecord, query_params,
+                #         user__semester=user.semester,
+                #         state=BMGTCaseRecord.State.SUCCESS,
+                #         case_id=case_id,
+                #         )
+                # else:
+                #     data = generic_paginated_query(
+                #         BMGTCaseRecord, query_params,
+                #         state=BMGTCaseRecord.State.SUCCESS,
+                #         case_id=case_id,
+                #         )
+                if user.role == BMGTUser.BMGTUserRole.USER:
+                    data = leaderboard_query(case_id, query_params, semesterId=user.semester.id) 
+                else:
+                    data = leaderboard_query(case_id, query_params)
                 resp.resolve(data)
             else:
                 raise BMGTCase.DoesNotExist
@@ -811,27 +823,39 @@ class ManageApi:
         
     
 
-def apiStartUp():
-    # handle previous case records that do not have performance metric
-    # records = BMGTCaseRecord.objects.filter(performance_metric__isnull=True, state = BMGTCaseRecord.State.SUCCESS)
-    # if records.exists():
-    #     for r in records:
-    #         summary = json.loads(r.summary_dict.replace("\'", "\""))
-    #         r.performance_metric = summary['perf_metric']
-    #         r.save()
+# def apiStartUp():
+#     # handle previous case records that do not have performance metric
+#     # records = BMGTCaseRecord.objects.filter(performance_metric__isnull=True, state = BMGTCaseRecord.State.SUCCESS)
+#     # if records.exists():
+#     #     for r in records:
+#     #         summary = json.loads(r.summary_dict.replace("\'", "\""))
+#     #         r.performance_metric = summary['perf_metric']
+#     #         r.save()
 
-    # create default case objects if not exist
-    try:
-        BMGTCase.objects.get(id=_FOOD_DELIVERY_CASE_ID)
-    except BMGTCase.DoesNotExist:
-        foodCenter = BMGTCase(id=_FOOD_DELIVERY_CASE_ID, name="Food Delivery", max_submission=-1, visible=False)
-        foodCenter.save()
+#     # create default case objects if not exist
+#     # try:
+#     #     BMGTCase.objects.get(id=_FOOD_DELIVERY_CASE_ID)
+#     # except BMGTCase.DoesNotExist:
+#     #     foodCenter = BMGTCase(id=_FOOD_DELIVERY_CASE_ID, name="Food Delivery", max_submission=-1, visible=False)
+#     #     foodCenter.save()
 
-    try:
-        BMGTCase.objects.get(id=_CALL_CENTER_CASE_ID)
-    except BMGTCase.DoesNotExist:
-        callCenter = BMGTCase(id=_CALL_CENTER_CASE_ID, name="Call Center", max_submission=-1, visible=False)
-        callCenter.save()         
+#     # try:
+#     #     BMGTCase.objects.get(id=_CALL_CENTER_CASE_ID)
+#     # except BMGTCase.DoesNotExist:
+#     #     callCenter = BMGTCase(id=_CALL_CENTER_CASE_ID, name="Call Center", max_submission=-1, visible=False)
+#     #     callCenter.save()      
 
+#     count = 0
+#     try:
+#         BMGTCaseRecord.objects.filter(state = BMGTCaseRecord.State.RUNNING).delete()
+#         BMGTCaseRecord.objects.filter(state = BMGTCaseRecord.State.FAILED).delete()
+#         for cr in BMGTCaseRecord.objects.filter(state = BMGTCaseRecord.State.SUCCESS):
+#             if cr.semester == None:
+#                 cr.semester = cr.group.semester
+#                 cr.save()
+#                 count += 1
+#     except Exception as e:
+#         print(e)   
+#     print(f"Updated {count} case records with semester info!")
 
-#apiStartUp()
+# apiStartUp()
