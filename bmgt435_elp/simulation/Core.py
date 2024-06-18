@@ -5,6 +5,7 @@ This module defines the framework-level objects and interfaces for running simul
 from io import BytesIO
 from dataclasses import dataclass, field
 from typing import Any, Union
+import numpy as np
 
 class SimulationHelper:
     """
@@ -337,3 +338,34 @@ class BaseDESEvent:
 
     def execute(self):
         raise NotImplementedError()
+    
+
+
+class ObservationSummary:
+
+    def __init__(self, array) -> None:
+        self.__array = array
+        self.__mean = np.mean(array,dtype=float)
+        self.__std = np.std(array, dtype=float)
+        self.__min = float(np.min(array))
+        self.__max = float(np.max(array))
+    
+    @property
+    def mean(self) -> float:
+        return self.__mean
+    
+    @property
+    def std(self) -> float:
+        return self.__std
+    
+    @property
+    def min(self) -> float:
+        return self.__min
+    
+    @property
+    def max(self) -> float:
+        return self.__max
+    
+    @property
+    def data(self) -> list:
+        return self.__array

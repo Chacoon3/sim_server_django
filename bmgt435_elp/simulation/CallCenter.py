@@ -2,7 +2,7 @@ import io
 import numpy as np
 import openpyxl
 import pandas as pd
-from .Core import SimulationException, SimulationResult, DiscreteEventCase, BaseDESEvent, SimulationHelper, ResourceQueue
+from .Core import SimulationException, SimulationResult, DiscreteEventCase, BaseDESEvent, SimulationHelper, ResourceQueue, ObservationSummary
 from typing import Union
 
 """
@@ -158,6 +158,12 @@ class Customer:
     def serviceType(self) -> int:
         return self.__serviceType
     
+    @property
+    def timeInSystem(self) -> Union[float, None]:
+        if self.__arrivalTime is None or self.__exitTime is None:
+            return None
+        return self.__exitTime - self.__arrivalTime
+    
 
 class Agent:
     __id = -1
@@ -251,15 +257,25 @@ class CallCenterResult(SimulationResult):
         main_sheet = wb.create_sheet('main')
         # write decision variables
         main_sheet.append(['Decision Variables'])
+        main_sheet.append([' '])
         header = ['agent'] + [f'{8 + i // 2}: {i % 2 * 30}' for i in range(18)]
         main_sheet.append(header)
         for row in self.schedules:
             main_sheet.append([' '] +  row)
-
+        main_sheet.append([' '])
+        
         # write summary data
-        for k in self.summaryData:
+        main_sheet.append(['Summary Statistics'])
+        main_sheet.append([' '])
+        count = 0
+        for k in self.summaryData:  # as an easy but not efficient way to pretty-print the summary, we use a magic number here
             v = self.summaryData[k]
             main_sheet.append([k, v])
+            if count == 0 or count == 1:
+                main_sheet.append([' '])
+            elif (count + 1 + 4) % 4 == 2:
+                main_sheet.append([' '])
+            count += 1
         
         # detail_sheet = wb.create_sheet('detail')
         # detail_sheet.append(self.iterationData.columns.tolist())
@@ -281,24 +297,19 @@ class CallCenterCase(DiscreteEventCase):
         """
         statistics collected from one iteration of the simulation
         """
-        def __init__(self) -> None:
-            self.maxTimeInQueue: float = None
-            self.avgTimeInQueue: float = None
-
-            self.maxServiceTime: float = None
-            self.avgServiceTime: float = None
-
-            self.qualityOfService: float = None
-            self.agentUtilizationRate: float = None
-
-            self.customerArrived: int = None
-            self.customerServed: int = None
-
-            self.renegeRate: float = None
-            self.bulkRate: float = None
-
-            self.avgQueueLengthOverTime: float = None
-            self.maxQueueLength: int = None
+        def __init__(self, 
+            timeInQueue, serviceTime, timeInSystem, qualityOfService, customerArrived, customerServed, renegeRate, bulkRate, queueLength, utilization) -> None:
+            self.timeInQueue:ObservationSummary = ObservationSummary(timeInQueue)
+            self.serviceTime:ObservationSummary = ObservationSummary(serviceTime)
+            self.avgQueueLengthOverTime:ObservationSummary = ObservationSummary(queueLength)
+            self.timeInSystem:ObservationSummary = ObservationSummary(timeInSystem)
+            self.qualityOfService:float = qualityOfService
+            self.customerArrived:int = customerArrived
+            self.customerServed:int = customerServed
+            self.renegeRate:float = renegeRate
+            self.bulkRate:float = bulkRate
+            self.utilization:float = utilization
+        
 
 
     # schedule is represented as a nested list. Each inner list represents a time interval.
@@ -516,7 +527,7 @@ class CallCenterCase(DiscreteEventCase):
         """
         totalServiceTime = sum([a.totalServiceTime for a in self.__agents[0]])
         totalScheduleTime = sum([a.totalScheduleTime for a in self.__agents[0]])
-        return round(totalServiceTime / totalScheduleTime, 6)
+        return round(totalServiceTime / totalScheduleTime * 100, 8)
     
 
     def reset(self):
@@ -555,27 +566,39 @@ class CallCenterCase(DiscreteEventCase):
             event.execute()
 
         # calculate and return iteration stats
-        stats = self.IterationStats()
+        avgQueueLength = self.__customerQueue.avgQueueLengthOverTime(0, self.endTime)
+        stats = self.IterationStats(
+            timeInQueue= [c.timeInQueue for c in self.__customers if c.timeInQueue is not None], 
+            serviceTime= [c.serviceTime for c in self.__customers if c.serviceTime is not None], 
+            qualityOfService= self.qualityOfService(300), 
+            timeInSystem= [c.timeInSystem for c in self.__customers if c.timeInSystem is not None],
+            customerArrived= len(self.__customers), customerServed= len([c for c in self.__customers if c.serviceTime is not None]),
+            renegeRate= np.mean([c.renege for c in self.__customers], dtype=float) * 100,
+            bulkRate= np.mean([c.bulk for c in self.__customers], dtype=float) * 100,
+            queueLength= avgQueueLength,
+            utilization= self.agentUtilizationRate()
+            )
 
-        stats.maxTimeInQueue = np.max([c.timeInQueue for c in self.__customers if c.timeInQueue is not None]),
-        stats.avgTimeInQueue = np.mean([c.timeInQueue for c in self.__customers if c.timeInQueue is not None]),
+        # stats.maxTimeInQueue = np.max([c.timeInQueue for c in self.__customers if c.timeInQueue is not None]),
+        # stats.avgTimeInQueue = np.mean([c.timeInQueue for c in self.__customers if c.timeInQueue is not None]),
 
-        stats.maxServiceTime = np.max([c.serviceTime for c in self.__customers if c.serviceTime is not None]),
-        stats.avgServiceTime = np.mean([c.serviceTime for c in self.__customers if c.serviceTime is not None]),
+        # stats.maxServiceTime = np.max([c.serviceTime for c in self.__customers if c.serviceTime is not None]),
+        # stats.avgServiceTime = np.mean([c.serviceTime for c in self.__customers if c.serviceTime is not None]),
 
-        stats.qualityOfService = self.qualityOfService(60)  # this is the performance measure described in the original paper
-        stats.agentUtilizationRate = self.agentUtilizationRate()
+        # stats.qualityOfService = self.qualityOfService(300)  # this is the performance measure described in the original paper
 
-        stats.customerArrived = len(self.__customers)
-        stats.customerServed = len([c for c in self.__customers if c.serviceTime is not None])
+        # stats.agentUtilizationRate = self.agentUtilizationRate()
 
-        stats.maxQueueLength = np.max(self.__customerQueue.maxQueueLength)
-        stats.avgQueueLengthOverTime = self.__customerQueue.avgQueueLengthOverTime(0, self.endTime)
+        # stats.customerArrived = len(self.__customers)
+        # stats.customerServed = len([c for c in self.__customers if c.serviceTime is not None])
 
-        # stats.renegeRate = len([c for c in self.__customers if c.renege]) / len(self.__customers)
-        stats.renegeRate = np.mean([c.renege for c in self.__customers], dtype=float)
-        # stats.bulkRate = len([c for c in self.__customers if c.bulk]) / len(self.__customers)
-        stats.bulkRate = np.mean([c.bulk for c in self.__customers], dtype=float)
+        # stats.maxQueueLength = np.max(self.__customerQueue.maxQueueLength)
+        # stats.avgQueueLengthOverTime = self.__customerQueue.avgQueueLengthOverTime(0, self.endTime)
+
+        # # stats.renegeRate = len([c for c in self.__customers if c.renege]) / len(self.__customers)
+        # stats.renegeRate = np.mean([c.renege for c in self.__customers], dtype=float)
+        # # stats.bulkRate = len([c for c in self.__customers if c.bulk]) / len(self.__customers)
+        # stats.bulkRate = np.mean([c.bulk for c in self.__customers], dtype=float)
 
         return stats
   
@@ -585,39 +608,68 @@ class CallCenterCase(DiscreteEventCase):
 
         # generate aggregated statistics
         avgQualityOfService = np.mean([s.qualityOfService for s in iterationStats])
+        avgAgentUtilizationRate = np.mean([s.utilization for s in iterationStats])
 
-        avgAgentUtilizationRate = np.mean([s.agentUtilizationRate for s in iterationStats])
+        avgTimeInQueueAgg = ObservationSummary([i.timeInQueue.mean for i in iterationStats])
+        avgTimeInSystemAgg = ObservationSummary([i.timeInSystem.mean for i in iterationStats])
+        avgServiceTimeAgg = ObservationSummary([i.serviceTime.mean for i in iterationStats])
 
-        avgMaxTimeInQueue = np.mean([s.maxTimeInQueue for s in iterationStats])
-        avgAvgTimeInQueue = np.mean([s.avgTimeInQueue for s in iterationStats])
+        arrivalAgg = ObservationSummary([s.customerArrived for s in iterationStats])
 
-        avgMaxServiceTime = np.mean([s.maxServiceTime for s in iterationStats])
-        avgAvgServiceTime = np.mean([s.avgServiceTime for s in iterationStats])
-        
-        avgCustomerArrived = np.mean([s.customerArrived for s in iterationStats])
-        avgCustomerServed = np.mean([s.customerServed for s in iterationStats])
+        servedArrivalAgg = ObservationSummary([s.customerServed for s in iterationStats])
 
-        maxMaxQueueLength=int(np.max([s.maxQueueLength for s in iterationStats])),
+        avgQueueLengthAgg = ObservationSummary([s.avgQueueLengthOverTime.mean for s in iterationStats])
 
-        avgRenegeRate = np.mean([s.renegeRate for s in iterationStats], dtype=float)
-        avgBulkRate = np.mean([s.bulkRate for s in iterationStats], dtype=float)
+        renegeAgg= ObservationSummary([s.renegeRate for s in iterationStats])
+        bulkAgg= ObservationSummary([s.bulkRate for s in iterationStats])
 
         summary = dict(
-            perf_metric=avgQualityOfService,
+            perf_metric=0.5 * (avgAgentUtilizationRate + avgQualityOfService),
+            avgQualityOfService=avgQualityOfService,
             avgAgentUtilizationRate=avgAgentUtilizationRate,
-            avgMaxTimeInQueue=avgMaxTimeInQueue,
-            avgAvgTimeInQueue=avgAvgTimeInQueue,
-            avgMaxServiceTime=avgMaxServiceTime,
-            avgAvgServiceTime=avgAvgServiceTime,
-            avgCustomerArrived=avgCustomerArrived,
-            avgCustomerServed=avgCustomerServed,
-            maxMaxQueueLength=maxMaxQueueLength[0],
-            avgRenegeRate=avgRenegeRate,
-            avgBulkRate=avgBulkRate,
-            avgAvgQueueLengthOverTime=np.mean([s.avgQueueLengthOverTime for s in iterationStats])
+
+            avgOfAverageTimeInSystem=avgTimeInSystemAgg.mean,
+            stdOfAverageTimeInSystem=avgTimeInSystemAgg.std,
+            maxOfAverageTimeInSystem=avgTimeInSystemAgg.max,
+            minOfAverageTimeInSystem=avgTimeInSystemAgg.min,
+
+            avgOfAverageTimeInQueue=avgTimeInQueueAgg.mean,
+            stdOfAverageTimeInQueue=avgTimeInQueueAgg.std,
+            maxOfAverageTimeInQueue=avgTimeInQueueAgg.max,
+            minOfAverageTimeInQueue=avgTimeInQueueAgg.min,
+
+            avgOfAverageServiceTime=avgServiceTimeAgg.mean,
+            stdOfAverageServiceTime=avgServiceTimeAgg.std,
+            maxOfAverageServiceTime=avgServiceTimeAgg.max,
+            minOfAverageServiceTime=avgServiceTimeAgg.min,
+
+            avgOfAverageCustomerArrived=arrivalAgg.mean,
+            stdOfAverageCustomerArrived=arrivalAgg.std,
+            maxOfAverageCustomerArrived=arrivalAgg.max,
+            minOfAverageCustomerArrived=arrivalAgg.min,
+
+            avgOfAverageCustomerServed=servedArrivalAgg.mean,
+            stdOfAverageCustomerServed=servedArrivalAgg.std,
+            maxOfAverageCustomerServed=servedArrivalAgg.max,
+            minOfAverageCustomerServed=servedArrivalAgg.min,
+
+            avgOfAverageQueueLength=avgQueueLengthAgg.mean,
+            stdOfAverageQueueLength=avgQueueLengthAgg.std,
+            maxOfAverageQueueLength=avgQueueLengthAgg.max,
+            minOfAverageQueueLength=avgQueueLengthAgg.min,
+
+            avgRenegeRate=renegeAgg.mean,
+            stdRenegeRate=renegeAgg.std,
+            maxRenegeRate=renegeAgg.max,
+            minRenegeRate=renegeAgg.min,
+
+            avgBulkRate=bulkAgg.mean,
+            stdBulkRate=bulkAgg.std,
+            maxBulkRate=bulkAgg.max,
+            minBulkRate=bulkAgg.min,
         )
 
-        score = avgQualityOfService * 0.5 + avgAgentUtilizationRate * 0.5
+        score = avgQualityOfService * 0.5 + (1 - avgAgentUtilizationRate) * 0.5
 
         return CallCenterResult(self.__rawSchedule, score, summary, iterationStats)
 
@@ -702,9 +754,9 @@ class ServiceEnd(CallCenterEvent):
         # task logic
         if self.__taskType == self.CUSTOMER:
             customer.exitTime = self.time
-            doCallback = np.random.random() < self.system.callbackRate()
-            if doCallback:
-                self.system.callbackQueue.enqueue(customer.offerType, customer)
+            # doCallback = np.random.random() < self.system.callbackRate()
+            # if doCallback:
+            #     self.system.callbackQueue.enqueue(customer.offerType, customer)
 
         # agent logic
         self.__agent.isBusy = False
