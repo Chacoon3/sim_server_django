@@ -248,8 +248,8 @@ class Agent:
     
 class CallCenterResult(SimulationResult):
     
-    def __init__(self, schedules:list[list[int]], score: float, summaryData: dict, iterationData: list = None) -> None:
-        super().__init__(score, summaryData, iterationData)
+    def __init__(self, schedules:list[list[int]], perfMetric: float, summaryData: dict, iterationData: list = None) -> None:
+        super().__init__(perfMetric, summaryData, iterationData)
         self.schedules = schedules
 
     def asFileStream(self) -> io.BytesIO:
@@ -265,15 +265,15 @@ class CallCenterResult(SimulationResult):
         main_sheet.append([' '])
         
         # write summary data
-        main_sheet.append(['Summary Statistics'])
+        main_sheet.append(['Summary Statistics (time unit in minutes)'])
         main_sheet.append([' '])
         count = 0
         for k in self.summaryData:  # as an easy but not efficient way to pretty-print the summary, we use a magic number here
             v = self.summaryData[k]
             main_sheet.append([k, v])
-            if count == 0 or count == 1:
+            if count <= 2:
                 main_sheet.append([' '])
-            elif (count + 1 + 4) % 4 == 2:
+            elif (count + 1 + 4) % 4 == 3:
                 main_sheet.append([' '])
             count += 1
         
@@ -326,9 +326,9 @@ class CallCenterCase(DiscreteEventCase):
 
     __TypeDecomposition = list[tuple[list[list[int]], int]]
 
-    @staticmethod
-    def callbackRate() -> float:
-        return 0.3
+    # @staticmethod
+    # def callbackRate() -> float:
+    #     return 0.3
 
     @staticmethod
     def __validateInput(decision:list[int]):
@@ -513,11 +513,9 @@ class CallCenterCase(DiscreteEventCase):
         return self.__endTime    
 
     def qualityOfService(self, x: float) -> float:
-        """
-        one of the two performance measures described in the original paper
-        """
         totalCalls = len(self.__customers)
-        qualifiedCalls = len([c for c in self.__customers if c.renege == False and c.timeInQueue is not None and c.timeInQueue <= x])
+        qualifiedCalls = len([c for c in self.__customers if c.renege == False and c.bulk == False and c.timeInQueue is not None and c.timeInQueue <= x])
+        # print(f"totalCalls: {totalCalls}, qualifiedCalls: {qualifiedCalls}")
         return round(qualifiedCalls / totalCalls * 100, 4)
 
 
@@ -603,16 +601,18 @@ class CallCenterCase(DiscreteEventCase):
         return stats
   
    
-    def run(self, num_iterations=100) -> SimulationResult:
+    def run(self, num_iterations) -> SimulationResult:
+
         iterationStats = [self.simulate() for _ in range(num_iterations)]
 
         # generate aggregated statistics
         avgQualityOfService = np.mean([s.qualityOfService for s in iterationStats])
         avgAgentUtilizationRate = np.mean([s.utilization for s in iterationStats])
 
-        avgTimeInQueueAgg = ObservationSummary([i.timeInQueue.mean for i in iterationStats])
-        avgTimeInSystemAgg = ObservationSummary([i.timeInSystem.mean for i in iterationStats])
-        avgServiceTimeAgg = ObservationSummary([i.serviceTime.mean for i in iterationStats])
+        # time unit conversion
+        avgTimeInQueueAgg = ObservationSummary([i.timeInQueue.mean / 60 for i in iterationStats])
+        avgTimeInSystemAgg = ObservationSummary([i.timeInSystem.mean / 60 for i in iterationStats])
+        avgServiceTimeAgg = ObservationSummary([i.serviceTime.mean / 60 for i in iterationStats])
 
         arrivalAgg = ObservationSummary([s.customerArrived for s in iterationStats])
 
@@ -623,8 +623,11 @@ class CallCenterCase(DiscreteEventCase):
         renegeAgg= ObservationSummary([s.renegeRate for s in iterationStats])
         bulkAgg= ObservationSummary([s.bulkRate for s in iterationStats])
 
+        
+        perfMetric = (avgQualityOfService + avgAgentUtilizationRate) / 2
+
         summary = dict(
-            perf_metric=0.5 * (avgAgentUtilizationRate + avgQualityOfService),
+            perf_metric= perfMetric,
             avgQualityOfService=avgQualityOfService,
             avgAgentUtilizationRate=avgAgentUtilizationRate,
 
@@ -669,9 +672,7 @@ class CallCenterCase(DiscreteEventCase):
             minBulkRate=bulkAgg.min,
         )
 
-        score = avgQualityOfService * 0.5 + (1 - avgAgentUtilizationRate) * 0.5
-
-        return CallCenterResult(self.__rawSchedule, score, summary, iterationStats)
+        return CallCenterResult(self.__rawSchedule, perfMetric, summary, iterationStats)
 
 
 class CallCenterEvent(BaseDESEvent):
@@ -820,12 +821,12 @@ class CallArrive(CallCenterEvent):
         customer.enqueueTime = self.time  # in this case the incoming call is immediately enqueued
 
         # try bulk logic
-        lineTolerance = np.random.triangular(5, 10, 20) 
+        lineTolerance = np.random.triangular(2, 5, 10) 
         bulkEvent = TryBulk(self.time, self.system, customer, lineTolerance)
         self.system.addEvent(bulkEvent)
 
         # try renege logic
-        timeTolerance = np.random.uniform(120, 300)
+        timeTolerance = np.random.triangular(240, 300, 500)
         renege = TryRenege(self.time + timeTolerance, self.system, customer)
         self.system.addEvent(renege)
         

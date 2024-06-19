@@ -140,7 +140,7 @@ def leaderboard_query(caseId:int, pager_params, semesterId = None) -> dict:
     #     groupMaxScore = groupMaxScore.filter(group__semester_id=semesterId)
 
     # Get the highest score for each group
-    subquery =candidateRows.filter(group=OuterRef('pk')).order_by('-score').values('pk')[:1]
+    subquery =candidateRows.filter(group=OuterRef('pk')).order_by('-performance_metric').values('pk')[:1]
 
     if semesterId is not None:
         groups_with_highest_score_cases = BMGTGroup.objects.filter(semester_id = semesterId).annotate(
