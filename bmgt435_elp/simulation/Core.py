@@ -343,12 +343,13 @@ class BaseDESEvent:
 
 class ObservationSummary:
 
-    def __init__(self, array) -> None:
+    def __init__(self, array, name = None) -> None:
         self.__array = array
         self.__mean = np.mean(array,dtype=float)
         self.__std = np.std(array, dtype=float)
         self.__min = float(np.min(array))
         self.__max = float(np.max(array))
+        self.__name = name
     
     @property
     def mean(self) -> float:
@@ -369,3 +370,7 @@ class ObservationSummary:
     @property
     def data(self) -> list:
         return self.__array
+    
+    @property   
+    def name(self) -> str:
+        return self.__name if self.__name is not None else ""

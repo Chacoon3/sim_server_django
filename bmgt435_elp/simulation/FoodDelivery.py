@@ -4,29 +4,36 @@ import io
 import numpy as np
 import pandas as pd
 import scipy.stats
-from .Core import SimulationCase, SimulationException, SimulationResult
+from .Core import SimulationCase, SimulationException, SimulationResult, ObservationSummary
 from typing import Union
 
 
 class FoodDeliveryResult(SimulationResult):
 
-    def __init__(self, centers, policies, perfMetric: float, summaryData, iterationData) -> None:
+    def __init__(self, centers, policies, perfMetric: float, summaryData:list[ObservationSummary], summaryDict, iterationData) -> None:
         super().__init__(perfMetric, summaryData, iterationData)
         self.__centers = centers
         self.__policies = policies
+        self.__summaryDict = summaryDict
 
     def asFileStream(self) -> io.BytesIO:
         wb = openpyxl.Workbook(write_only=True)
         main_sheet = wb.create_sheet('main')
         main_sheet.append(['Decision Variables'])
+        main_sheet.append([' '])
         main_sheet.append(['center', 's', 'S'])
         for center, policy in zip(self.__centers, self.__policies):
             main_sheet.append([center, policy[0], policy[1]])
+        main_sheet.append([' '])
 
-        main_sheet.append(["Summary Data"])
-        main_sheet.append(self.summaryData.columns.tolist())
-        for row in self.summaryData.values.tolist():
-            main_sheet.append(row)
+        main_sheet.append(["Summary Statistics"])
+        main_sheet.append([' '])
+        main_sheet.append(["Number of Iterations", self.iterationData.iteration.nunique()])
+        main_sheet.append([' '])
+        main_sheet.append(["Metric name", "Mean", "Std", "Min", "Max"])
+        
+        for obs in self.summaryData:
+            main_sheet.append([obs.name, obs.mean, obs.std, obs.min, obs.max])
         
         detail_sheet = wb.create_sheet('detail')
         detail_sheet.append(self.iterationData.columns.tolist())
@@ -40,7 +47,7 @@ class FoodDeliveryResult(SimulationResult):
     
 
     def asDict(self) -> dict:
-        return self.summaryData.loc[0,].to_dict()
+        return self.__summaryDict
 
 
 class FoodDelivery(SimulationCase):
@@ -98,7 +105,7 @@ class FoodDelivery(SimulationCase):
     __holding_cost: float = 10     # multiplier for holding cost
     __min_week_demand: int = 10
     __max_week_demand: int = 6000
-    __num_weeks: int = 52
+    __num_weeks: int = 26
     __initial_inventory: int = 1000
     __max_weekly_restock: int = 7000
     __num_iterations: int = 1
@@ -203,27 +210,32 @@ class FoodDelivery(SimulationCase):
         # define the output data:
         #       the output data describes one iteration of the simulation
         #       a nested dictionary is used to store the weekly state of each center and thereby yield the aggregation statistics
-        history = {
-            center.get_name(): {
-                # 'cum_demand': 0,
-                # 'cum_supply': 0,
-                # 'cum_shortage_count': 0,
-                # 'cum_shortage_amount': 0,
-                # 'cum_revenue': 0,
-                # 'cum_holding_cost': 0,
+        # history = {
+        #     center.get_name(): {
+        #         # 'cum_demand': 0,
+        #         # 'cum_supply': 0,
+        #         # 'cum_shortage_count': 0,
+        #         # 'cum_shortage_amount': 0,
+        #         # 'cum_revenue': 0,
+        #         # 'cum_holding_cost': 0,
 
-                # keys below are for detailed output
-                'prior_inventory': [],
-                'post_inventory': [],
-                'demand': [],
-                'supply': [],
-                'shortage_count': [],
-                'shortage_amount': [],
-                'revenue': [],
-                'holding_cost': []
-            }
-            for center in centers
-        }
+        #         # keys below are for detailed output
+        #         'prior_inventory': [],
+        #         'post_inventory': [],
+        #         'demand': [],
+        #         'supply': [],
+        #         'shortage_count': [],
+        #         'shortage_amount': [],
+        #         'revenue': [],
+        #         'holding_cost': []
+        #     }
+        #     for center in centers
+        # }
+
+        historyDf = pd.DataFrame(
+            columns=["hub", "week", "prior_inventory", "post_inventory", "demand", "supply", "shortage_count", "shortage_cost", "revenue", "holding_cost", "fixed_cost"],
+            index=range(FoodDelivery.__num_weeks * len(centers)))
+        rowCounter = 0
 
         output = {
             'perf_metric': float('-inf'),
@@ -232,13 +244,13 @@ class FoodDelivery(SimulationCase):
             'total_shortage_cost': 0,
             'total_holding_cost': 0,
             'total_fixed_cost': 0,
-            'history': history
+            # 'history': history
         }
 
         # main logic
 
         # for every week
-        for every_week in range(FoodDelivery.__num_weeks):
+        for weekIndex in range(FoodDelivery.__num_weeks):
 
             # check inventory
             arr_purchase = [center.s_big() - center.get_inventory() if center.get_inventory()
@@ -321,61 +333,101 @@ class FoodDelivery(SimulationCase):
                 #     history[c_name]['cum_revenue'] + order_revenue, 2)
                 # history[c_name]['cum_holding_cost'] += holding_cost
 
-                history[c_name]['prior_inventory'].append(prior_inv)
-                history[c_name]['post_inventory'].append(post_inv)
-                history[c_name]['demand'].append(demand)
-                history[c_name]['supply'].append(supply)
-                history[c_name]['shortage_count'].append(shortage_count)
-                history[c_name]['shortage_amount'].append(shortage_penalty)
-                history[c_name]['revenue'].append(order_revenue)
-                history[c_name]['holding_cost'].append(holding_cost)
+                # history[c_name]['prior_inventory'].append(prior_inv)
+                # history[c_name]['post_inventory'].append(post_inv)
+                # history[c_name]['demand'].append(demand)
+                # history[c_name]['supply'].append(supply)
+                # history[c_name]['shortage_count'].append(shortage_count)
+                # history[c_name]['shortage_amount'].append(shortage_penalty)
+                # history[c_name]['revenue'].append(order_revenue)
+                # history[c_name]['holding_cost'].append(holding_cost)
 
-        # perform aggregation
-        output['total_revenue'] = round(sum([
-            sum(history[c.get_name()]['revenue']) for c in centers
-        ]), 2)
-        output['total_shortage_count'] = round(sum([
-            sum(history[c.get_name()]['shortage_count']) for c in centers
-        ]), 2)
-        output['total_shortage_cost'] = round(sum([
-            sum(history[c.get_name()]['shortage_amount']) for c in centers
-        ]), 2)
-        output['total_holding_cost'] = sum([
-            sum(history[c.get_name()]['holding_cost']) for c in centers
-        ])
-        output['total_fixed_cost'] = len(
-            centers) * self.__num_weeks * FoodDelivery.__center_weekly_cost
+                historyDf.loc[rowCounter] = [c_name, weekIndex + 1, prior_inv, post_inv, demand, supply, shortage_count, shortage_penalty, order_revenue, holding_cost, FoodDelivery.__center_weekly_cost]
+                rowCounter += 1
+
+        # aggregation
+        # dfAgg = historyDf.groupby("hub").agg({
+        #     "shortage_count": "sum",
+        #     "shortage_cost": "sum",
+        #     "revenue": "sum",
+        #     "holding_cost": "sum",
+        #     "fixed_cost": "sum"
+        # })
+
+
+        # output['total_revenue'] = round(sum([
+        #     sum(history[c.get_name()]['revenue']) for c in centers
+        # ]), 2)
+        # output['total_shortage_count'] = round(sum([
+        #     sum(history[c.get_name()]['shortage_count']) for c in centers
+        # ]), 2)
+        # output['total_shortage_cost'] = round(sum([
+        #     sum(history[c.get_name()]['shortage_amount']) for c in centers
+        # ]), 2)
+        # output['total_holding_cost'] = sum([
+        #     sum(history[c.get_name()]['holding_cost']) for c in centers
+        # ])
+
+        output['total_revenue'] = round(historyDf['revenue'].sum(), 2)
+        output['total_shortage_count'] = round(historyDf['shortage_count'].sum(), 2)
+        output['total_shortage_cost'] = round(historyDf['shortage_cost'].sum(), 2)
+        output['total_holding_cost'] = round(historyDf['holding_cost'].sum(), 2)
+        output['total_fixed_cost'] = round(historyDf['fixed_cost'].sum(), 2)
+        
         output['perf_metric'] = round(
-            output['total_revenue'] - output['total_shortage_cost'] - \
-            output['total_fixed_cost'] - output['total_holding_cost'],
+            output['total_revenue'] - output['total_shortage_cost'] - output['total_fixed_cost'] - output['total_holding_cost'],
             2
         )
+
+        output['historyDf'] = historyDf
         return output
 
-    def run(self, iterations: int = 1) -> FoodDeliveryResult:
+    def run(self, iterations) -> FoodDeliveryResult:
         original_centers = copy.deepcopy(self.__centers)
         if self.__config is not None:   # remap centers
             self.__centers = [self.__config[c] for c in self.__centers]
-        
-        res = self.simulate()
-        score = self.score(res)
-        performance_metric = res['perf_metric']
-        history = res.pop('history')
-        df_aggregated_statistics = pd.DataFrame(res, index=[0])
-        arr_df_per_center_statistics = [
-            pd.DataFrame(history[center_name]) for center_name in history.keys()
-        ]
-        for centerwise_df, c_name in zip(arr_df_per_center_statistics, history.keys()):
-            # add center name and week index columns
-            centerwise_df['hub'] = c_name
-            centerwise_df['week'] = range(1, FoodDelivery.__num_weeks + 1)
 
-        df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
+        iterationStats = [self.simulate() for _ in range(iterations)]
+        
+        pmAgg = ObservationSummary([i['perf_metric'] for i in iterationStats], "performanceMetric")
+        revenueAgg = ObservationSummary([i['total_revenue'] for i in iterationStats], "totalRevenue")
+        shortageCountAgg = ObservationSummary([i['total_shortage_count'] for i in iterationStats], "totalShortageCount")
+        shortageCostAgg = ObservationSummary([i['total_shortage_cost'] for i in iterationStats], "totalShortageCost")
+        holdingCostAgg = ObservationSummary([i['total_holding_cost'] for i in iterationStats], "totalHoldingCost")
+        fixedCostAgg = ObservationSummary([i['total_fixed_cost'] for i in iterationStats], "totalFixedCost")
+
+        performance_metric = pmAgg.mean
+
+        iterationDfs = [(iterationStats[i].pop('historyDf'), i + 1) for i in range(len(iterationStats))]
+        dfDetails = pd.concat([df.assign(iteration=label) for df, label in iterationDfs], ignore_index=True)
+        # dfDetails = pd.concat([
+        #     i.pop('historyDf') for i in iterationStats],axis=0)
+        # print(dfDetails.head())
+
+        # arr_df_per_center_statistics = [
+        #     pd.DataFrame(history[center_name]) for center_name in history.keys() for history in histories
+        # ]
+
+        # for centerwise_df, c_name in zip(arr_df_per_center_statistics, history.keys()):
+        #     # add center name and week index columns
+        #     centerwise_df['hub'] = c_name
+        #     centerwise_df['week'] = range(1, FoodDelivery.__num_weeks + 1)
+
+        # df_per_center_statistics = pd.concat(arr_df_per_center_statistics, axis=0)
+        df_per_center_statistics = dfDetails
         
         if self.__config is not None:   # reverse the remapping
             df_per_center_statistics['hub'] = df_per_center_statistics['hub'].map(
                 {v: k for k, v in self.__config.items()}
             )
 
-        simRes = FoodDeliveryResult(original_centers, self.__policies, performance_metric, df_aggregated_statistics, df_per_center_statistics)
+        summaries = [pmAgg, revenueAgg, shortageCountAgg, shortageCostAgg, holdingCostAgg, fixedCostAgg]
+        summaryDict = dict(
+            perf_metric = pmAgg.mean,
+            total_shortage_count = shortageCountAgg.mean,
+            total_shortage_cost = shortageCostAgg.mean,
+            total_holding_cost = holdingCostAgg.mean,
+            total_fixed_cost = fixedCostAgg.mean
+        )
+        simRes = FoodDeliveryResult(original_centers, self.__policies, performance_metric, summaries, summaryDict, df_per_center_statistics)
         return simRes

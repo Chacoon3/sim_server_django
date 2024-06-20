@@ -248,9 +248,10 @@ class Agent:
     
 class CallCenterResult(SimulationResult):
     
-    def __init__(self, schedules:list[list[int]], perfMetric: float, summaryData: dict, iterationData: list = None) -> None:
+    def __init__(self, schedules:list[list[int]], perfMetric: float, summaryData: list[ObservationSummary], summaryDict, iterationData: list = None) -> None:
         super().__init__(perfMetric, summaryData, iterationData)
         self.schedules = schedules
+        self.__summaryDict= summaryDict
 
     def asFileStream(self) -> io.BytesIO:
         wb = openpyxl.Workbook(write_only=True)
@@ -265,22 +266,13 @@ class CallCenterResult(SimulationResult):
         main_sheet.append([' '])
         
         # write summary data
-        main_sheet.append(['Summary Statistics (time unit in minutes)'])
+        main_sheet.append(["Summary Statistics"])
         main_sheet.append([' '])
-        count = 0
-        for k in self.summaryData:  # as an easy but not efficient way to pretty-print the summary, we use a magic number here
-            v = self.summaryData[k]
-            main_sheet.append([k, v])
-            if count <= 2:
-                main_sheet.append([' '])
-            elif (count + 1 + 4) % 4 == 3:
-                main_sheet.append([' '])
-            count += 1
-        
-        # detail_sheet = wb.create_sheet('detail')
-        # detail_sheet.append(self.iterationData.columns.tolist())
-        # for row in self.iterationData.values.tolist():
-        #     detail_sheet.append(row)
+        main_sheet.append(["Number of Iterations", len(self.iterationData)])
+        main_sheet.append([' '])
+        main_sheet.append(["Metric name", "Mean", "Std", "Min", "Max"])
+        for obs in self.summaryData:
+            main_sheet.append([obs.name, obs.mean, obs.std, obs.min, obs.max])
     
         bytes_io = io.BytesIO()
         wb.save(filename=bytes_io)
@@ -288,7 +280,7 @@ class CallCenterResult(SimulationResult):
         return bytes_io
     
     def asDict(self) -> dict:
-        return self.summaryData
+        return self.__summaryDict
     
 
 class CallCenterCase(DiscreteEventCase):
@@ -310,7 +302,6 @@ class CallCenterCase(DiscreteEventCase):
             self.bulkRate:float = bulkRate
             self.utilization:float = utilization
         
-
 
     # schedule is represented as a nested list. Each inner list represents a time interval.
     # an agent may work during multiple time intervals in a day
@@ -606,73 +597,42 @@ class CallCenterCase(DiscreteEventCase):
         iterationStats = [self.simulate() for _ in range(num_iterations)]
 
         # generate aggregated statistics
-        avgQualityOfService = np.mean([s.qualityOfService for s in iterationStats])
-        avgAgentUtilizationRate = np.mean([s.utilization for s in iterationStats])
+        qosAgg = ObservationSummary([s.qualityOfService for s in iterationStats], "Qualityof Service")
+        utilAgg = ObservationSummary([s.utilization for s in iterationStats], "Agent Utilization Rate")
 
-        # time unit conversion
-        avgTimeInQueueAgg = ObservationSummary([i.timeInQueue.mean / 60 for i in iterationStats])
-        avgTimeInSystemAgg = ObservationSummary([i.timeInSystem.mean / 60 for i in iterationStats])
-        avgServiceTimeAgg = ObservationSummary([i.serviceTime.mean / 60 for i in iterationStats])
+        # including time unit conversion
+        avgTimeInQueueAgg = ObservationSummary([i.timeInQueue.mean / 60 for i in iterationStats], "Average Time in Queue (minutes)")
+        avgTimeInSystemAgg = ObservationSummary([i.timeInSystem.mean / 60 for i in iterationStats], "Average Time in System (minutes)")
+        avgServiceTimeAgg = ObservationSummary([i.serviceTime.mean / 60 for i in iterationStats], "Average Service Time (minutes)")
 
-        arrivalAgg = ObservationSummary([s.customerArrived for s in iterationStats])
+        arrivalAgg = ObservationSummary([s.customerArrived for s in iterationStats], "Number of Arrivals")
 
-        servedArrivalAgg = ObservationSummary([s.customerServed for s in iterationStats])
+        servedArrivalAgg = ObservationSummary([s.customerServed for s in iterationStats], "Number of Served Arrivals")
 
-        avgQueueLengthAgg = ObservationSummary([s.avgQueueLengthOverTime.mean for s in iterationStats])
+        avgQueueLengthAgg = ObservationSummary([s.avgQueueLengthOverTime.mean for s in iterationStats], "Average Queue Length")
 
-        renegeAgg= ObservationSummary([s.renegeRate for s in iterationStats])
-        bulkAgg= ObservationSummary([s.bulkRate for s in iterationStats])
+        renegeAgg= ObservationSummary([s.renegeRate for s in iterationStats], "Renege Rate")
+        bulkAgg= ObservationSummary([s.bulkRate for s in iterationStats], "Bulk Rate")
 
         
-        perfMetric = (avgQualityOfService + avgAgentUtilizationRate) / 2
+        perfMetric = (qosAgg.mean + utilAgg.mean) / 2
 
-        summary = dict(
-            perf_metric= perfMetric,
-            avgQualityOfService=avgQualityOfService,
-            avgAgentUtilizationRate=avgAgentUtilizationRate,
+        summary = [qosAgg, utilAgg, avgTimeInQueueAgg, avgTimeInSystemAgg, avgServiceTimeAgg, arrivalAgg, servedArrivalAgg, avgQueueLengthAgg, renegeAgg, bulkAgg]
 
-            avgOfAverageTimeInSystem=avgTimeInSystemAgg.mean,
-            stdOfAverageTimeInSystem=avgTimeInSystemAgg.std,
-            maxOfAverageTimeInSystem=avgTimeInSystemAgg.max,
-            minOfAverageTimeInSystem=avgTimeInSystemAgg.min,
-
-            avgOfAverageTimeInQueue=avgTimeInQueueAgg.mean,
-            stdOfAverageTimeInQueue=avgTimeInQueueAgg.std,
-            maxOfAverageTimeInQueue=avgTimeInQueueAgg.max,
-            minOfAverageTimeInQueue=avgTimeInQueueAgg.min,
-
-            avgOfAverageServiceTime=avgServiceTimeAgg.mean,
-            stdOfAverageServiceTime=avgServiceTimeAgg.std,
-            maxOfAverageServiceTime=avgServiceTimeAgg.max,
-            minOfAverageServiceTime=avgServiceTimeAgg.min,
-
+        summaryDict = dict(
+            perf_metric=perfMetric,
+            avgQualityOfService=qosAgg.mean,
+            avgAgentUtilizationRate=utilAgg.mean,
             avgOfAverageCustomerArrived=arrivalAgg.mean,
-            stdOfAverageCustomerArrived=arrivalAgg.std,
-            maxOfAverageCustomerArrived=arrivalAgg.max,
-            minOfAverageCustomerArrived=arrivalAgg.min,
-
             avgOfAverageCustomerServed=servedArrivalAgg.mean,
-            stdOfAverageCustomerServed=servedArrivalAgg.std,
-            maxOfAverageCustomerServed=servedArrivalAgg.max,
-            minOfAverageCustomerServed=servedArrivalAgg.min,
-
-            avgOfAverageQueueLength=avgQueueLengthAgg.mean,
-            stdOfAverageQueueLength=avgQueueLengthAgg.std,
-            maxOfAverageQueueLength=avgQueueLengthAgg.max,
-            minOfAverageQueueLength=avgQueueLengthAgg.min,
-
-            avgRenegeRate=renegeAgg.mean,
-            stdRenegeRate=renegeAgg.std,
-            maxRenegeRate=renegeAgg.max,
-            minRenegeRate=renegeAgg.min,
-
-            avgBulkRate=bulkAgg.mean,
-            stdBulkRate=bulkAgg.std,
-            maxBulkRate=bulkAgg.max,
-            minBulkRate=bulkAgg.min,
+            avgOfAverageTimeInQueue=avgTimeInQueueAgg.mean,
+            avgOfAverageTimeInSystem = avgTimeInSystemAgg.mean,
+            avgOfAverageQueueLength = avgQueueLengthAgg.mean,
+            avgRenegeRate = renegeAgg.mean,
+            avgBulkRate = bulkAgg.mean
         )
 
-        return CallCenterResult(self.__rawSchedule, perfMetric, summary, iterationStats)
+        return CallCenterResult(self.__rawSchedule, perfMetric, summary, summaryDict, iterationStats)
 
 
 class CallCenterEvent(BaseDESEvent):

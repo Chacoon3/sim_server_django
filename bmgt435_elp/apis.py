@@ -304,7 +304,7 @@ class CaseApi:
                 if CaseApi.__case_submittable(case_instance, group):                    
                     # id to simulation case mapping
                     if case_id == 1:     # food center
-                        replication = 100
+                        replication = 50
                         params = data['case_params']
                         configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
                         if configQuery.exists():
