@@ -455,7 +455,7 @@ class CallCenterCase(DiscreteEventCase):
         return schedules
     
     
-    def __init__(self, schedules:list[list[int]]) -> None:  # param names fixed
+    def __init__(self, schedules:list[list[int]], config:Union[dict, None]= None) -> None:  # param names fixed
         """
         decision: matrix of integers representing each agent's schedule
         """

@@ -300,9 +300,11 @@ class CaseApi:
             case_instance = BMGTCase.objects.get(id=case_id)
             if user.group != None:
                 group = user.group
+                replication:int= None
                 if CaseApi.__case_submittable(case_instance, group):                    
                     # id to simulation case mapping
                     if case_id == 1:     # food center
+                        replication = 100
                         params = data['case_params']
                         configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
                         if configQuery.exists():
@@ -310,6 +312,7 @@ class CaseApi:
                             params['config'] = config
                         simulation_instance = FoodDelivery(**params)
                     elif case_id == 2:   # call center
+                        replication = 10
                         params = data['case_params']
                         configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
                         if configQuery.exists():
@@ -330,7 +333,7 @@ class CaseApi:
                         case_record.save()
 
                     # run simulation
-                    res = simulation_instance.run(10)
+                    res = simulation_instance.run(replication)
                     caseRecordStream = res.asFileStream()
                     caseSummary = res.asDict()
                     case_record.summary_dict = caseSummary
