@@ -312,9 +312,9 @@ class CaseApi:
                             params['config'] = config
                         simulation_instance = FoodDelivery(**params)
                     elif case_id == 2:   # call center
-                        replication = 10
+                        replication = 50
                         params = data['case_params']
-                        configQuery = BMGTCaseConfig.objects.filter(case_id=case_id,)
+                        configQuery = BMGTCaseConfig.objects.filter(case_id=case_id)
                         if configQuery.exists():
                             config = json.loads(configQuery.get().config_json)
                             params['config'] = config
@@ -507,11 +507,6 @@ class ManageApi:
         try:
             resp = AppResponse()
             data = json.loads(request.body)
-            configObj = {}
-            for pair in data['config']:
-                val1 = pair[0]
-                val2 = pair[1]
-                configObj[val1] = val2
             case_id = int(data['case_id'])
             querySet = BMGTCaseConfig.objects.filter(case_id=case_id)
             if not querySet.exists():
@@ -519,6 +514,11 @@ class ManageApi:
             else:
                 config = querySet.get()
             if case_id == _FOOD_DELIVERY_CASE_ID:
+                configObj = {}
+                for pair in data['config']:
+                    val1 = pair[0]
+                    val2 = pair[1]
+                    configObj[val1] = val2
                 if FoodDelivery.is_config_valid(configObj):
                     config.config_json = json.dumps(configObj)
                     config.edited_time = timezone.now()
@@ -527,7 +527,16 @@ class ManageApi:
                 else:
                     resp.reject("Invalid case configuration!")
             elif case_id == _CALL_CENTER_CASE_ID:
-                ManageApi.set_call_center_config(configObj)
+                indice = list[int]()
+                for i in data["config"]:
+                    indice.append(i)
+                if CallCenter.CallCenterCase.is_config_valid(indice):
+                    config.config_json = json.dumps(indice)
+                    config.edited_time = timezone.now()
+                    config.save()
+                    resp.resolve("New map applied!")
+                else:
+                    resp.reject("Invalid case configuration!")
             else:
                 raise BMGTCase.DoesNotExist
             
@@ -542,10 +551,9 @@ class ManageApi:
     @request_error_handler
     @require_GET
     @staticmethod
-    def  view_case_config(request: HttpRequest) -> HttpResponse:
+    def  view_case_config(request: HttpRequest, case_id: int) -> HttpResponse:
         pager_params = pager_params_from_request(request)
-        pager_params['case_id'] = _FOOD_DELIVERY_CASE_ID
-        data = generic_paginated_query(BMGTCaseConfig, pager_params)
+        data = generic_paginated_query(BMGTCaseConfig, pager_params, case_id=case_id)
         return _resolvePaginatedData(data)
     
 

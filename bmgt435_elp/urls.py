@@ -45,12 +45,12 @@ urlpatterns = [
     path("api/manage/case-visibility", ManageApi.case_visibility,),
 
     path('api/manage/case-config/update', ManageApi.set_case_config,),
-    path('api/manage/case-config/view', ManageApi.view_case_config,),
+    path('api/manage/case-config/view/<int:case_id>', ManageApi.view_case_config,),
 
     path('api/manage/semesters/create', ManageApi.create_semester,),
     path('api/manage/semesters/all', ManageApi.get_semesters,),
     path('api/manage/semesters/delete', ManageApi.delete_semesters,),
 
-    path('api/manage/system/view', ManageApi.view_system_state,),
-    path('api/manage/system/update', ManageApi.update_system_state,),    
+    # path('api/manage/system/view', ManageApi.view_system_state,),
+    # path('api/manage/system/update', ManageApi.update_system_state,),    
 ]

@@ -1,7 +1,6 @@
 import io
 import numpy as np
 import openpyxl
-import pandas as pd
 from .Core import SimulationException, SimulationResult, DiscreteEventCase, BaseDESEvent, SimulationHelper, ResourceQueue, ObservationSummary
 from typing import Union
 
@@ -302,7 +301,6 @@ class CallCenterCase(DiscreteEventCase):
             self.bulkRate:float = bulkRate
             self.utilization:float = utilization
         
-
     # schedule is represented as a nested list. Each inner list represents a time interval.
     # an agent may work during multiple time intervals in a day
 
@@ -317,17 +315,14 @@ class CallCenterCase(DiscreteEventCase):
 
     __TypeDecomposition = list[tuple[list[list[int]], int]]
 
-    # @staticmethod
-    # def callbackRate() -> float:
-    #     return 0.3
-
     @staticmethod
-    def __validateInput(decision:list[int]):
-        for numberOfAgents in decision:
-            if numberOfAgents < 0:
-                raise SimulationException("Invalid decision. Decision cannot be negative!")
-            if numberOfAgents > 20:
-                raise SimulationException("Invalid decision. Decision cannot be greater than 5!")
+    def is_config_valid(config) -> bool:
+        if type(config) is not list:
+            return False
+        if len(config) != 18:
+            return False
+        indice = np.array(config)
+        return np.all(indice >= 0) and np.all(indice <= 17) and np.unique(indice).shape[0] == 18
 
     @staticmethod
     def __validateMatrixInput(decision:list[list[int]]):
@@ -346,25 +341,24 @@ class CallCenterCase(DiscreteEventCase):
         if not atLeastOneAgent:
             raise SimulationException("Invalid decision. At least one agent must be working!")
             
-    @staticmethod
-    def __validateArrivalRate():
-        if len(CallCenterCase.__arrivalRateWeightBySlot) != 18:
-            raise SimulationException("Invalid arrival rate. Arrival rate must have 18 elements!")
-        for rate in CallCenterCase.__arrivalRateWeightBySlot:
-            if rate < 0 or rate > 100:
-                raise SimulationException("Invalid arrival rate. Arrival rate should be within [0, 100]!")
+    # @staticmethod
+    # def __validateArrivalRate():
+    #     if len(CallCenterCase.__arrivalRateWeightBySlot) != 18:
+    #         raise SimulationException("Invalid arrival rate. Arrival rate must have 18 elements!")
+    #     for rate in CallCenterCase.__arrivalRateWeightBySlot:
+    #         if rate < 0 or rate > 100:
+    #             raise SimulationException("Invalid arrival rate. Arrival rate should be within [0, 100]!")
             
     @staticmethod            
     def generateServiceTime() -> float:
         return min(np.random.exponential(228.98) + 77.020, 2000) # truncating with 2000 seconds
     
-    @staticmethod
-    def generateInterArrivalTime(currentTime: float) -> float:
+    def generateInterArrivalTime(self, currentTime: float) -> float:
         slotLength = CallCenterCase.__timeSlotLengthInSec
         timeSlot = int(currentTime // slotLength)
-        if timeSlot < 0 or timeSlot > len(CallCenterCase.__arrivalRateWeightBySlot):
+        if timeSlot < 0 or timeSlot > len(self.__arrivalRateWeightBySlot):
             raise SimulationException(f"Invalid arrival rate. Arrival rate index out of range! systime: {currentTime}")
-        arrRate = CallCenterCase.__arrivalRateWeightBySlot[timeSlot] * CallCenterCase.__estimatedDailyTotalArrivals 
+        arrRate = self.__arrivalRateWeightBySlot[timeSlot] * CallCenterCase.__estimatedDailyTotalArrivals 
         return np.random.exponential(slotLength / arrRate) # time conversion from half hour to seconds
     
     @staticmethod
@@ -446,7 +440,7 @@ class CallCenterCase(DiscreteEventCase):
         return schedules
     
     
-    def __init__(self, schedules:list[list[int]], config:Union[dict, None]= None) -> None:  # param names fixed
+    def __init__(self, schedules:list[list[int]], config:Union[list[int], None]= None) -> None:  # param names fixed
         """
         decision: matrix of integers representing each agent's schedule
         """
@@ -454,12 +448,13 @@ class CallCenterCase(DiscreteEventCase):
         self.__validateMatrixInput(schedules)
         self.__rawSchedule = schedules
         self.__schedules = self.__convertMatrixToSchedule(schedules)
-        self.__validateArrivalRate()
+        # self.__validateArrivalRate()
         self.__endTime = 3600 * 9  # 9 hours
         self.__customers = list[Customer]() # records all customers
         self.__customerQueue = ResourceQueue(self)  # priority queues for customers
         self.__callbackQueue  = ResourceQueue(self)  # priority queues for callback tasks
         self.__agents = [list[Agent]() for _ in range(3)]  # empty lists for lv1, lv2, lv3 agents
+        self.__config = config
 
     def shouldStop(self) -> bool:
         return self._eventQueue.empty() or self.systemTime >= self.__endTime
@@ -568,31 +563,16 @@ class CallCenterCase(DiscreteEventCase):
             utilization= self.agentUtilizationRate()
             )
 
-        # stats.maxTimeInQueue = np.max([c.timeInQueue for c in self.__customers if c.timeInQueue is not None]),
-        # stats.avgTimeInQueue = np.mean([c.timeInQueue for c in self.__customers if c.timeInQueue is not None]),
-
-        # stats.maxServiceTime = np.max([c.serviceTime for c in self.__customers if c.serviceTime is not None]),
-        # stats.avgServiceTime = np.mean([c.serviceTime for c in self.__customers if c.serviceTime is not None]),
-
-        # stats.qualityOfService = self.qualityOfService(300)  # this is the performance measure described in the original paper
-
-        # stats.agentUtilizationRate = self.agentUtilizationRate()
-
-        # stats.customerArrived = len(self.__customers)
-        # stats.customerServed = len([c for c in self.__customers if c.serviceTime is not None])
-
-        # stats.maxQueueLength = np.max(self.__customerQueue.maxQueueLength)
-        # stats.avgQueueLengthOverTime = self.__customerQueue.avgQueueLengthOverTime(0, self.endTime)
-
-        # # stats.renegeRate = len([c for c in self.__customers if c.renege]) / len(self.__customers)
-        # stats.renegeRate = np.mean([c.renege for c in self.__customers], dtype=float)
-        # # stats.bulkRate = len([c for c in self.__customers if c.bulk]) / len(self.__customers)
-        # stats.bulkRate = np.mean([c.bulk for c in self.__customers], dtype=float)
-
         return stats
   
    
     def run(self, num_iterations) -> SimulationResult:
+
+        np.random.seed(0)
+
+        if self.__config is not None:
+            remapped = [self.__arrivalRateWeightBySlot[i] for i in self.__config]
+            self.__arrivalRateWeightBySlot = remapped
 
         iterationStats = [self.simulate() for _ in range(num_iterations)]
 
@@ -606,14 +586,11 @@ class CallCenterCase(DiscreteEventCase):
         avgServiceTimeAgg = ObservationSummary([i.serviceTime.mean / 60 for i in iterationStats], "Average Service Time (minutes)")
 
         arrivalAgg = ObservationSummary([s.customerArrived for s in iterationStats], "Number of Arrivals")
-
         servedArrivalAgg = ObservationSummary([s.customerServed for s in iterationStats], "Number of Served Arrivals")
 
         avgQueueLengthAgg = ObservationSummary([s.avgQueueLengthOverTime.mean for s in iterationStats], "Average Queue Length")
-
         renegeAgg= ObservationSummary([s.renegeRate for s in iterationStats], "Renege Rate")
         bulkAgg= ObservationSummary([s.bulkRate for s in iterationStats], "Bulk Rate")
-
         
         perfMetric = (qosAgg.mean + utilAgg.mean) / 2
 
@@ -767,7 +744,7 @@ class CallArrive(CallCenterEvent):
     def execute(self):
 
         # next arrival logic
-        deltaTime = CallCenterCase.generateInterArrivalTime(self.time)
+        deltaTime = self.system.generateInterArrivalTime(self.time)
         nextArrTime = self.system.systemTime + deltaTime
         if nextArrTime < self.system.endTime:
             nextArrEvent = CallArrive(nextArrTime, self.system)

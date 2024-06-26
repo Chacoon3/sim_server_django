@@ -383,6 +383,8 @@ class FoodDelivery(SimulationCase):
         return output
 
     def run(self, iterations) -> FoodDeliveryResult:
+        np.random.seed(0)
+
         original_centers = copy.deepcopy(self.__centers)
         if self.__config is not None:   # remap centers
             self.__centers = [self.__config[c] for c in self.__centers]

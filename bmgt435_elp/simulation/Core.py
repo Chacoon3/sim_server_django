@@ -6,6 +6,10 @@ from io import BytesIO
 from dataclasses import dataclass, field
 from typing import Any, Union
 import numpy as np
+import random
+
+np.random.seed(0)
+random.seed(0)
 
 class SimulationHelper:
     """
