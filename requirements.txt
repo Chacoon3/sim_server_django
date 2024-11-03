@@ -1,9 +1,15 @@
-Django==4.1.6
-numpy==1.23.2
-openpyxl==3.0.10
+# Django==4.1.6
+Django
+# numpy==1.23.2
+numpy
+# openpyxl==3.0.10
+openpyxl    
 daphne==4.0.0
-pandas==1.4.4
-regex==2022.4.24
-scipy==1.11.2
+# pandas==1.4.4
+pandas
+# regex==2022.4.24
+regex
+# scipy==1.11.2
+scipy
 pymysql
 gunicorn==21.2.0

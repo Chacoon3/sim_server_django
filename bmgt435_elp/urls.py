@@ -6,7 +6,7 @@ urlpatterns = [
 
     path("api/auth/sign-in", AuthApi.sign_in, name="sign-in"),
     path("api/auth/sign-up", AuthApi.sign_up, name="sign-up"),
-    path("api/auth/forget-password", AuthApi.password_reset, name="forget-password"),
+    path("api/auth/user-reset", AuthApi.user_reset, name="forget-password"),
     path('api/auth/sign-out', AuthApi.sign_out, name='sign-out'),
 
 
@@ -50,7 +50,4 @@ urlpatterns = [
     path('api/manage/semesters/create', ManageApi.create_semester,),
     path('api/manage/semesters/all', ManageApi.get_semesters,),
     path('api/manage/semesters/delete', ManageApi.delete_semesters,),
-
-    # path('api/manage/system/view', ManageApi.view_system_state,),
-    # path('api/manage/system/update', ManageApi.update_system_state,),    
 ]

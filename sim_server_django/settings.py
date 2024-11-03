@@ -16,12 +16,12 @@ if DEBUG == True:
 else:
     print("running in production mode")
 
-
+# specify the app frontend host env var during dev otherwise frontend cannot access the api
 ALLOWED_HOSTS = ['app', 'localhost', '127.0.0.1', AppConfig.APP_FRONTEND_HOST]
 
 CSRF_TRUSTED_ORIGINS = [
  'http://localhost', f'http://{AppConfig.APP_FRONTEND_HOST}',
-"https://localhost", f"https://{AppConfig.APP_FRONTEND_HOST}"
+ 'https://localhost', f'https://{AppConfig.APP_FRONTEND_HOST}',
 ]
 
 

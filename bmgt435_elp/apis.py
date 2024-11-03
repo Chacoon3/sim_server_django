@@ -111,10 +111,21 @@ class AuthApi:
     @request_error_handler
     @require_POST
     @staticmethod
-    def password_reset(request: HttpRequest) -> HttpResponse:
-
-        user_did = request.GET.get('did')
-        raise NotImplementedError
+    def user_reset(request: HttpRequest) -> HttpResponse:
+        resp = AppResponse()
+        try:
+            data = json.loads(request.body)
+            user_did = data.get('did')
+            user = BMGTUser.objects.get(did=user_did)
+            user.activated = False
+            user.save()
+            resp.resolve("Password reset success! Please create new password by signing up again using the same directory ID.")
+        except BMGTUser.DoesNotExist:
+            resp.reject("User not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+        return resp
+        
 
     @request_error_handler
     @require_POST
@@ -587,6 +598,27 @@ class ManageApi:
             return ManageApi.__set_case_visibility(request)
         elif request.method == "GET":
             return ManageApi.__get_case_visibility(request)
+        
+    @request_error_handler
+    @require_POST
+    @staticmethod
+    def reset_user(request: HttpRequest) -> HttpResponse:
+        try:
+            resp = AppResponse()
+            data = json.loads(request.body)
+            user_id = data['user_id']
+            user = BMGTUser.objects.get(id=user_id)
+            user.password = None
+            user.activated = False
+            user.group = None
+            user.save()
+            resp.resolve("User reset!")
+        except BMGTUser.DoesNotExist:
+            resp.reject("User not found!")
+        except KeyError:
+            resp.reject("Invalid data format!")
+        return resp
+    
 
     @request_error_handler
     @require_GET
@@ -617,38 +649,6 @@ class ManageApi:
 
         return resp
 
-    @request_error_handler
-    @require_GET
-    @staticmethod
-    def view_system_state(request: HttpRequest) -> HttpResponse:
-        try:
-            resp = AppResponse()
-            status = BMGTSystemStatus.objects.get(id=1)
-            resp.resolve(status)
-        except BMGTSystemStatus.DoesNotExist:
-            resp.reject("System not found!")
-
-        return resp
-    
-    @request_error_handler
-    @require_POST
-    @staticmethod
-    def update_system_state(request: HttpRequest) -> HttpResponse:
-        try:
-            resp = AppResponse()
-            data = json.loads(request.body)
-            system = BMGTSystemStatus.objects.get(id=1)
-            for key, value in data.items():
-                system.__setattr__(key, value)
-            system.save()
-            resp.resolve("System updated!")
-        except BMGTSystemStatus.DoesNotExist:
-            resp.reject("System not found!")
-        except KeyError:
-            resp.reject("Invalid data format!")
-
-        return resp
-    
 
     @staticmethod
     def __set_case_submission_limit(request: HttpRequest) -> HttpResponse:
