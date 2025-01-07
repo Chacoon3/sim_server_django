@@ -260,8 +260,10 @@ class CallCenterResult(SimulationResult):
         main_sheet.append([' '])
         header = ['agent'] + [f'{8 + i // 2}: {i % 2 * 30}' for i in range(18)]
         main_sheet.append(header)
+        indexer = 1
         for row in self.schedules:
-            main_sheet.append([' '] +  row)
+            main_sheet.append([indexer] +  row)
+            indexer += 1
         main_sheet.append([' '])
         
         # write summary data
