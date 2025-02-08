@@ -291,7 +291,9 @@ class CallCenterCase(DiscreteEventCase):
         statistics collected from one iteration of the simulation
         """
         def __init__(self, 
-            timeInQueue, serviceTime, timeInSystem, qualityOfService, customerArrived, customerServed, renegeRate, bulkRate, queueLength, utilization) -> None:
+            timeInQueue, serviceTime, timeInSystem, 
+            qualityOfService, customerArrived, customerServed, 
+            renegeRate, bulkRate, queueLength, utilization, profit) -> None:
             self.timeInQueue:ObservationSummary = ObservationSummary(timeInQueue)
             self.serviceTime:ObservationSummary = ObservationSummary(serviceTime)
             self.avgQueueLengthOverTime:ObservationSummary = ObservationSummary(queueLength)
@@ -302,6 +304,7 @@ class CallCenterCase(DiscreteEventCase):
             self.renegeRate:float = renegeRate
             self.bulkRate:float = bulkRate
             self.utilization:float = utilization
+            self.profit:float = profit
         
     # schedule is represented as a nested list. Each inner list represents a time interval.
     # an agent may work during multiple time intervals in a day
@@ -428,7 +431,7 @@ class CallCenterCase(DiscreteEventCase):
 
 
     @staticmethod
-    def __convertMatrixToSchedule(decision:list[list[int]]) -> list[list[list[int]]]:
+    def __convertMatrixToSchedules(decision:list[list[int]]) -> list[list[list[int]]]:
         """
         convert the matrix input into a list of agent schedules
         """
@@ -441,6 +444,16 @@ class CallCenterCase(DiscreteEventCase):
             schedules.append(schedule)
         return schedules
     
+    @staticmethod
+    def  __calcTotalWorkTime(schedule:list[list[int]]) -> float:
+        """
+        calculates the total time an agent is available to work.
+        """
+        total = 0
+        for interval in schedule:
+            total += interval[1] - interval[0]
+        return total
+    
     
     def __init__(self, schedules:list[list[int]], config:Union[list[int], None]= None) -> None:  # param names fixed
         """
@@ -449,7 +462,7 @@ class CallCenterCase(DiscreteEventCase):
         super().__init__()
         self.__validateMatrixInput(schedules)
         self.__rawSchedule = schedules
-        self.__schedules = self.__convertMatrixToSchedule(schedules)
+        self.__schedules = self.__convertMatrixToSchedules(schedules)
         # self.__validateArrivalRate()
         self.__endTime = 3600 * 9  # 9 hours
         self.__customers = list[Customer]() # records all customers
@@ -457,6 +470,7 @@ class CallCenterCase(DiscreteEventCase):
         self.__callbackQueue  = ResourceQueue(self)  # priority queues for callback tasks
         self.__agents = [list[Agent]() for _ in range(3)]  # empty lists for lv1, lv2, lv3 agents
         self.__config = config
+        self.__totalWorkTime = sum([self.__calcTotalWorkTime(schedule) for schedule in self.__schedules])
 
     def shouldStop(self) -> bool:
         return self._eventQueue.empty() or self.systemTime >= self.__endTime
@@ -553,16 +567,29 @@ class CallCenterCase(DiscreteEventCase):
 
         # calculate and return iteration stats
         avgQueueLength = self.__customerQueue.avgQueueLengthOverTime(0, self.endTime)
+        
+        profitPerCustomer = 40
+        costPerAgent = 40
+        
+        customer_arrived = len(self.__customers)
+        custoemr_served = len([c for c in self.__customers if c.serviceTime is not None])
+        customer_reneged= len([c for c in self.__customers if c.renege])
+        customer_bulked= len([c for c in self.__customers if c.bulk])
+        
+        profitMetric = (custoemr_served - customer_reneged - customer_bulked) * profitPerCustomer - (self.__totalWorkTime / 3600) * costPerAgent
+
         stats = self.IterationStats(
             timeInQueue= [c.timeInQueue for c in self.__customers if c.timeInQueue is not None], 
             serviceTime= [c.serviceTime for c in self.__customers if c.serviceTime is not None], 
             qualityOfService= self.qualityOfService(300), 
             timeInSystem= [c.timeInSystem for c in self.__customers if c.timeInSystem is not None],
-            customerArrived= len(self.__customers), customerServed= len([c for c in self.__customers if c.serviceTime is not None]),
+            customerArrived= customer_arrived, 
+            customerServed= len([c for c in self.__customers if c.serviceTime is not None]),
             renegeRate= np.mean([c.renege for c in self.__customers], dtype=float) * 100,
             bulkRate= np.mean([c.bulk for c in self.__customers], dtype=float) * 100,
             queueLength= avgQueueLength,
-            utilization= self.agentUtilizationRate()
+            utilization= self.agentUtilizationRate(),
+            profit= profitMetric
             )
 
         return stats
@@ -593,8 +620,10 @@ class CallCenterCase(DiscreteEventCase):
         avgQueueLengthAgg = ObservationSummary([s.avgQueueLengthOverTime.mean for s in iterationStats], "Average Queue Length")
         renegeAgg= ObservationSummary([s.renegeRate for s in iterationStats], "Renege Rate")
         bulkAgg= ObservationSummary([s.bulkRate for s in iterationStats], "Bulk Rate")
+
+        profitAgg = ObservationSummary([s.profit for s in iterationStats], "Profit")
         
-        perfMetric = (qosAgg.mean + utilAgg.mean) / 2
+        perfMetric = (qosAgg.mean + utilAgg.mean) / 2 # paper original
 
         summary = [qosAgg, utilAgg, avgTimeInQueueAgg, avgTimeInSystemAgg, avgServiceTimeAgg, arrivalAgg, servedArrivalAgg, avgQueueLengthAgg, renegeAgg, bulkAgg]
 
@@ -608,7 +637,8 @@ class CallCenterCase(DiscreteEventCase):
             avgOfAverageTimeInSystem = avgTimeInSystemAgg.mean,
             avgOfAverageQueueLength = avgQueueLengthAgg.mean,
             avgRenegeRate = renegeAgg.mean,
-            avgBulkRate = bulkAgg.mean
+            avgBulkRate = bulkAgg.mean,
+            avgProfit = profitAgg.mean
         )
 
         return CallCenterResult(self.__rawSchedule, perfMetric, summary, summaryDict, iterationStats)
